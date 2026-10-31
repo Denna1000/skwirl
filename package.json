@@ -1,0 +1,20 @@
+{
+  "name": "skwirl",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Skwirl: slim inslaan, nooit te veel betalen. Gedeeld boodschappenlijstje met GitHub als opslag.",
+  "type": "module",
+  "packageManager": "pnpm@12.16.1",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs && node scripts/serve.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
