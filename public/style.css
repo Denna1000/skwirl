@@ -350,3 +350,8 @@ select.sel { border: 1px solid var(--line); background: var(--surface); border-r
 .chip.soon { background: var(--pine-soft); color: var(--pine); }
 .meta.wait-tip { color: var(--pine); font-weight: 600; margin-top: 2px; }
 .supply .meta .chip { margin-right: 4px; }
+.folder-card { margin-bottom: 12px; }
+.folder-links { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 6px; }
+.folder-links .btn { text-decoration: none; color: var(--ink); }
+.meta.when { font-size: 12.5px; }
+.meta.when.soon { color: var(--pine); font-weight: 600; }

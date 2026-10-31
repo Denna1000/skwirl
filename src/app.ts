@@ -2,7 +2,7 @@
 // Alle gegevens staan als JSON in een privé GitHub-repository; deze code bevat geen persoonlijke gegevens.
 
 import { JsonFile, checkConnection, GitHubError, type Connection } from './github.js';
-import type { Address, Deal, DealsFile, Household, Kind, ListFile, ListItem, Product, Store } from './types.js';
+import type { Address, Deal, DealsFile, FolderLink, Household, Kind, ListFile, ListItem, Product, Store } from './types.js';
 import { parseEntry } from './parse.js';
 import { dealWhen } from './deals.js';
 import { iconFor } from './art.js';
@@ -28,6 +28,12 @@ const DEFAULT_CHAINS: Household['chains'] = {
   gamma: { name: 'Gamma', kind: 'bouw' }, praxis: { name: 'Praxis', kind: 'bouw' }, pets: { name: 'Pets Place', kind: 'dier' },
   bol: { name: 'bol.com', kind: 'online' },
 };
+// Vaste actiepagina's als de geplande taak (nog) geen folderlink heeft gevonden
+const FOLDER_PAGES: Record<string, string> = {
+  ah: 'https://www.ah.nl/bonus/folder', jumbo: 'https://www.jumbo.com/aanbiedingen', lidl: 'https://www.lidl.nl/c/aanbiedingen/a10008785',
+  vomar: 'https://www.vomar.nl/aanbiedingen', kruidvat: 'https://www.kruidvat.nl/acties', etos: 'https://www.etos.nl/acties/',
+  gamma: 'https://www.gamma.nl/folder', pets: 'https://www.petsplace.nl/acties', bol: 'https://www.bol.com/nl/nl/sf/aanbiedingen/',
+};
 const KIND_ANY: Record<Kind, string> = { super: 'elke supermarkt', drogist: 'elke drogist', online: 'online', bouw: 'elke bouwmarkt', dier: 'elke dierenwinkel', slager: 'elke slager', overig: 'overal' };
 const KIND_NAME: Record<Kind, string> = { super: 'Supermarkt', drogist: 'Drogist', online: 'Online', bouw: 'Bouwmarkt', dier: 'Dierenwinkel', slager: 'Slager', overig: 'Overig' };
 const CATS = ['Groente & fruit', 'Zuivel & eieren', 'Brood & ontbijt', 'Voorraadkast', 'Vlees & vis', 'Dranken', 'Baby', 'Huisdieren',
@@ -49,7 +55,7 @@ function save(key: string, value: unknown): void {
 }
 
 let cfg = load<Config>(CFG_KEY);
-const ui: Ui = Object.assign({ tab: 'vandaag', addr: null, listChain: 'ah', addAny: true, dealsMine: true } as Ui, load<Partial<Ui>>(UI_KEY));
+const ui: Ui = Object.assign({ tab: 'vandaag', addr: null, listChain: 'ah', addAny: true, dealsMine: false } as Ui, load<Partial<Ui>>(UI_KEY));
 let list: JsonFile<ListFile> | null = null;
 let house: JsonFile<Household> | null = null;
 let deals: JsonFile<DealsFile> | null = null;
@@ -70,7 +76,7 @@ const $ = <E extends HTMLElement = HTMLElement>(sel: string): E => document.quer
 
 const chainName = (c: string): string => H().chains[c]?.name ?? c;
 const kindOf = (c: string): Kind => H().chains[c]?.kind ?? 'overig';
-/** Ketens waarvan je minstens één winkel volgt; alleen die verschijnen in lijst, Vandaag en Deals */
+/** Ketens waarvan je minstens één winkel volgt; alleen die verschijnen in lijst, Vandaag en Folders */
 function followedChains(): string[] {
   const followed = new Set(H().stores.filter((s) => s.follow).map((s) => s.chain));
   const keys = Object.keys(H().chains).filter((c) => followed.has(c));
@@ -280,23 +286,51 @@ function viewLijstje(): string {
     <section class="card"><div class="section-head" style="margin-bottom:0"><h2>${esc(chainName(chain))}</h2><span class="unit">${esc(where)}</span></div>${listPanel(chain, false)}</section>`;
 }
 
+function dealRow(dl: Deal): string {
+  const p = product(dl.productId); const on = L().some((l) => l.dealId === dl.id && !l.done);
+  const w = dealWhen(dl);
+  const chip = dl.span && SPAN_CHIP[dl.span] ? `<span class="chip warn">${SPAN_CHIP[dl.span]}</span> ` : '';
+  const mine = p ? '<span class="chip ok">Jouw product</span> ' : '';
+  return `<div class="supply"><div style="min-width:0"><div class="name">${esc(p?.name ?? dl.title)}</div>
+    <div class="meta">${mine}${chip}${esc([dl.mech, dl.price !== null ? eur(dl.price) : '', dl.normal && dl.price ? `was ${eur(dl.normal)}` : ''].filter(Boolean).join(' · '))}</div>
+    <div class="meta when ${w.state}">${esc(w.label)}</div></div>
+    <button class="btn small" data-action="deal-add" data-id="${esc(dl.id)}" ${on ? 'disabled' : ''}>${on ? 'Op de lijst' : 'Op lijstje'}</button></div>`;
+}
+
+/** Folderlinks van een keten: wat de taak vond, anders de vaste actiepagina */
+function folderLinks(chain: string): { label: string; url: string }[] {
+  const found = (deals!.data.folders ?? []).filter((f: FolderLink) => f.chain === chain)
+    .map((f) => ({ f, w: dealWhen({ from: f.from, until: f.until, span: 'week' }) })).filter(({ w }) => w.state !== 'expired')
+    .sort((x, y) => x.w.startsIn - y.w.startsIn)
+    .map(({ f, w }) => ({ label: w.state === 'soon' ? 'Folder volgende week' : 'Folder deze week', url: f.url }));
+  if (found.length) return found;
+  return FOLDER_PAGES[chain] ? [{ label: 'Acties bekijken', url: FOLDER_PAGES[chain] }] : [];
+}
+
 function viewDeals(): string {
   const a = currentAddr();
-  const fc = followedChains();
-  const all = liveDeals().filter((dl) => fc.includes(dl.chain) && (!ui.dealsMine || product(dl.productId)))
-    .sort((x, y) => dealWhen(x).startsIn - dealWhen(y).startsIn);
-  const byChain = new Map<string, Deal[]>();
-  all.forEach((dl) => byChain.set(dl.chain, (byChain.get(dl.chain) ?? []).concat(dl)));
-  const groups = [...byChain.entries()].map(([chain, dls]) => ({ chain, dls, ns: nearestStore(chain, a) }))
-    .sort((x, y) => (x.ns?.d ?? 99) - (y.ns?.d ?? 99));
+  // winkels met acties eerst, online achteraan, verder op afstand
+  const hasDeals = (c: string): boolean => liveDeals().some((dl) => dl.chain === c && (!ui.dealsMine || product(dl.productId)));
+  const chains = followedChains().map((c) => ({ c, ns: nearestStore(c, a) }))
+    .sort((x, y) => Number(!hasDeals(x.c)) - Number(!hasDeals(y.c)) || Number(!!x.ns?.st.online) - Number(!!y.ns?.st.online) || (x.ns?.d ?? 99) - (y.ns?.d ?? 99));
   const upd = deals!.data.updatedAt ? new Date(deals!.data.updatedAt).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' }) : null;
-  return `<div class="section-head"><div><h1>Aanbiedingen</h1><p class="sub">${upd ? `Opgehaald op ${esc(upd)}${deals!.data.source ? ` door ${esc(deals!.data.source)}` : ''}. Controleer de prijs in de winkel.` : 'Nog niets opgehaald. De geplande Claude-taak zet hier de acties neer.'}</p></div></div>
-    <div class="filters"><button class="pill" aria-pressed="${ui.dealsMine}" data-action="deals-mine" data-v="1">Voor mijn producten</button><button class="pill" aria-pressed="${!ui.dealsMine}" data-action="deals-mine" data-v="0">Alles</button></div>
-    ${groups.length ? groups.map((g) => `<section class="card" style="margin-bottom:12px"><div class="section-head"><h2>${esc(chainName(g.chain))}</h2><span class="unit">${g.ns ? (g.ns.st.online ? 'Online' : `${esc(g.ns.st.place)}, ${km(g.ns.d)}`) : 'Geen vestiging gevolgd'}</span></div>
-      ${g.dls.map((dl) => { const p = product(dl.productId); const on = L().some((l) => l.dealId === dl.id && !l.done);
-        return `<div class="supply"><div style="min-width:0"><div class="name">${esc(p?.name ?? dl.title)}</div><div class="meta">${(() => { const w = dealWhen(dl); return w.state === 'soon' ? '<span class="chip soon">Binnenkort</span> ' : dl.span && SPAN_CHIP[dl.span] ? `<span class="chip warn">${SPAN_CHIP[dl.span]}</span> ` : ''; })()}${esc(dealLine(dl))}${dl.url ? ` · <a href="${esc(dl.url)}" target="_blank" rel="noopener">bron</a>` : ''}</div></div>
-          <button class="btn small" data-action="deal-add" data-id="${esc(dl.id)}" ${on ? 'disabled' : ''}>${on ? 'Op de lijst' : 'Op lijstje'}</button></div>`; }).join('')}</section>`).join('')
-      : '<div class="empty">Geen aanbiedingen om te tonen.</div>'}`;
+  const cards = chains.map(({ c, ns }) => {
+    const dls = liveDeals().filter((dl) => dl.chain === c && (!ui.dealsMine || product(dl.productId)))
+      .sort((x, y) => dealWhen(x).startsIn - dealWhen(y).startsIn || Number(!product(x.productId)) - Number(!product(y.productId)));
+    const short = dls.filter((dl) => dl.span === 'dag' || dl.span === 'weekend');
+    const week = dls.filter((dl) => !short.includes(dl) && dealWhen(dl).state === 'now');
+    const next = dls.filter((dl) => !short.includes(dl) && dealWhen(dl).state === 'soon');
+    const part = (title: string, list: Deal[]): string => list.length ? `<div class="basket-head">${title}</div>${list.map(dealRow).join('')}` : '';
+    const links = folderLinks(c);
+    return `<section class="card folder-card">
+      <div class="section-head" style="margin-bottom:4px"><div><h2>${esc(chainName(c))}</h2><span class="unit">${ns ? (ns.st.online ? 'Online' : `${esc(ns.st.place)}, ${km(ns.d)}`) : ''}</span></div></div>
+      ${links.length ? `<div class="folder-links">${links.map((l) => `<a class="btn small" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)} ↗</a>`).join('')}</div>` : ''}
+      ${part('Dag- en weekendacties', short)}${part('Deze week', week)}${part('Volgende week', next)}
+      ${dls.length ? '' : `<p class="sub" style="font-size:13.5px">${ui.dealsMine ? 'Geen acties voor je eigen producten.' : 'Nog geen acties opgehaald.'}</p>`}</section>`;
+  }).join('');
+  return `<div class="section-head"><div><h1>Folders</h1><p class="sub">${upd ? `Bijgewerkt op ${esc(upd)}. Controleer de prijs in de winkel.` : 'Nog niets opgehaald. De geplande Claude-taak zet hier de acties neer.'}</p></div></div>
+    <div class="filters"><button class="pill" aria-pressed="${!ui.dealsMine}" data-action="deals-mine" data-v="0">Hele folder</button><button class="pill" aria-pressed="${ui.dealsMine}" data-action="deals-mine" data-v="1">Mijn producten</button></div>
+    ${cards || '<div class="empty">Voeg bij Plekken de winkels toe waar je komt.</div>'}`;
 }
 
 function viewProducten(): string {
@@ -429,7 +463,7 @@ function showSetup(error = ''): void {
 const TABS: [Tab, string, string][] = [
   ['vandaag', 'Vandaag', '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>'],
   ['lijstje', 'Boodschappen', '<path d="M4 7h2.5l2 10h9.5l2-7.5H7.4"/><circle cx="10" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/>'],
-  ['deals', 'Deals', '<path d="M3.5 12.5V4.5a1 1 0 0 1 1-1h8l8 8-9 9z"/><circle cx="8.5" cy="8.5" r="1.5"/>'],
+  ['deals', 'Folders', '<path d="M4 5.5h12.5v13a1.5 1.5 0 0 0 1.5 1.5H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M16.5 9H20v9.5a1.5 1.5 0 0 1-3 0M7 9h6.5M7 12.5h6.5M7 16h4"/>'],
   ['producten', 'Producten', '<path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5 12 12l8.5-4.5M12 12v9"/>'],
 ];
 const VIEWS: Record<Tab, () => string> = { vandaag: viewVandaag, lijstje: viewLijstje, deals: viewDeals, producten: viewProducten, plekken: viewPlekken };
@@ -679,7 +713,7 @@ function readLinkConfig(): Partial<Config> | null {
 }
 
 const fromLink = readLinkConfig();
-const hashTab = location.hash.slice(1) as Tab;
+const hashTab = (location.hash.slice(1) === 'folders' ? 'deals' : location.hash.slice(1)) as Tab;
 if (hashTab in VIEWS) ui.tab = hashTab;
 if (fromLink) { setupPrefill = { ...fromLink, name: '' }; showSetup(); }
 else if (cfg) void connect();

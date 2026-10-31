@@ -64,4 +64,7 @@ export interface Deal {
   url: string | null;
 }
 
-export interface DealsFile { updatedAt: string | null; source: string | null; deals: Deal[] }
+/** Link naar de folder van een keten voor een bepaalde periode */
+export interface FolderLink { chain: string; from: string | null; until: string | null; url: string }
+
+export interface DealsFile { updatedAt: string | null; source: string | null; deals: Deal[]; folders?: FolderLink[] }

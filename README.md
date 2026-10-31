@@ -6,6 +6,7 @@ Een gedeeld boodschappenlijstje voor twee, met vaste producten, je eigen plekken
 
 - **Boodschappen**: per winkel, tegels zoals in Bring. Tik erop of eraf; houd ingedrukt voor eigenschap (bio, 500 ml) of aantal. Producten kunnen voor "elke supermarkt" of "drogist of online" gelden.
 - **Vandaag**: je lijstje, de beste winkel voor de aanbiedingen van nu, en wat bijna op is.
+- **Folders**: per winkel de dag- en weekendacties, deze week en volgende week, met een knop naar de echte folder.
 - **Producten**: wat je steeds opnieuw koopt. Tik je het van de lijst, dan weet Skwirl wanneer het weer op is.
 - **Plekken**: je adressen en de winkels die je volgt, en een koppellink voor een tweede telefoon.
 
