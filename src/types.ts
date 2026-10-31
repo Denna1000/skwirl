@@ -42,6 +42,9 @@ export interface Product {
   wants?: string | null;
   /** Wat juist niet, bijv. "plakken" of "vleeswaren voor op brood" */
   avoid?: string | null;
+  /** Titels van acties waarvan je zei "Klopt" of "Past niet"; de scan leert hiervan */
+  likes?: string[];
+  dislikes?: string[];
   /** Aankoopmomenten (ms), nieuwste achteraan; hieruit leert Skwirl je koopritme */
   bought?: number[];
   /** Oud veld: handmatig ingesteld aantal dagen; alleen gebruikt zolang er te weinig aankopen zijn */
