@@ -57,7 +57,6 @@ let sheet: null | { type: 'item'; id: string } | { type: 'product'; id: string |
 let draft = '';
 let placeResults: Place[] = [];
 let pollTimer: number | undefined;
-let showUnfollowed = false;
 
 const H = (): Household => house!.data;
 const L = (): ListItem[] => list!.data.items;
@@ -290,18 +289,16 @@ function viewPlekken(): string {
     <input type="range" id="r-${esc(a.id)}" min="0.5" max="20" step="0.5" value="${a.radius}" data-action="radius" data-v="${esc(a.id)}"></div>
     <button class="btn small ghost" data-action="addr-del" data-v="${esc(a.id)}">Verwijderen</button></div>`).join('');
   const followed = H().stores.filter((s) => s.follow).sort((x, y) => Number(!!x.online) - Number(!!y.online));
-  const unfollowed = H().stores.filter((s) => !s.follow);
   const row = (st: Store): string => {
     const dists = st.online ? 'Online' : H().addresses.map((a) => { const d = distanceKm(a, st); return `<span class="${d <= a.radius ? 'in' : ''}">${esc(a.name)} ${d < 30 ? km(d) : '—'}</span>`; }).join(' · ');
     return `<div class="st-row"><div style="min-width:0"><strong>${esc(st.name)}</strong> <span class="unit">${esc(st.place)}</span><div class="st-d num">${dists}</div></div>
-      <span class="switch"><input type="checkbox" ${st.follow ? 'checked' : ''} data-action="follow" data-v="${esc(st.id)}" aria-label="Volg ${esc(st.name)} ${esc(st.place)}"></span></div>`;
+      <button class="x" data-action="store-del" data-v="${esc(st.id)}" aria-label="${esc(st.name)} ${esc(st.place)} verwijderen" title="Verwijderen">×</button></div>`;
   };
   return `<div class="section-head"><div><h1>Plekken &amp; winkels</h1><p class="sub">Vanaf deze adressen zoekt Skwirl de beste winkel.</p></div><button class="btn" data-action="addr-new">Adres toevoegen</button></div>
     <div class="deal-grid">${addrs || '<div class="empty">Nog geen adressen.</div>'}</div>
-    <section class="card" style="margin-top:16px"><div class="section-head"><div><h2>Winkels die je volgt</h2><span class="unit">Groen = binnen je straal</span></div><button class="btn small" data-action="store-new">Winkel toevoegen</button></div>
-      ${followed.map(row).join('') || '<div class="empty">Je volgt nog geen winkels.</div>'}
-      ${unfollowed.length ? `<details class="unfollowed" ${showUnfollowed ? 'open' : ''}><summary>Niet gevolgd (${unfollowed.length})</summary><p class="hint">Deze winkels zie je nergens in de app. Zet ze aan om ze weer te volgen.</p>
-        ${unfollowed.map(row).join('')}</details>` : ''}</section>
+    <section class="card" style="margin-top:16px"><div class="section-head"><div><h2>Je winkels</h2><span class="unit">Groen = binnen je straal</span></div><button class="btn small" data-action="store-new">Winkel toevoegen</button></div>
+      ${followed.map(row).join('') || '<div class="empty">Nog geen winkels. Voeg de winkels toe waar je komt.</div>'}
+</section>
     <section class="card" style="margin-top:16px"><h2>Samen gebruiken</h2>
       <p class="sub">Verbonden met <strong>${esc(cfg!.owner)}/${esc(cfg!.repo)}</strong> als <strong>${esc(cfg!.name)}</strong>.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn" data-action="share">Telefoon koppelen</button><button class="btn ghost" data-action="disconnect">Ontkoppelen op dit apparaat</button></div></section>`;
@@ -538,6 +535,7 @@ document.addEventListener('click', (e) => {
     case 'addr': ui.addr = v; render(); break;
     case 'addr-new': placeResults = []; sheet = { type: 'address' }; render(); break;
     case 'store-new': placeResults = []; sheet = { type: 'store' }; render(); break;
+    case 'store-del': { const st = H().stores.find((x) => x.id === v); if (st && confirm(`${st.name} ${st.place} verwijderen? Je kunt hem later opnieuw toevoegen.`)) house.mutate((h) => { h.stores = h.stores.filter((x) => x.id !== v); }, `Winkel weg: ${st.name} ${st.place}`).catch(() => {}); break; }
     case 'addr-del': { const a = H().addresses.find((x) => x.id === v); if (a && confirm(`${a.name} verwijderen?`)) house.mutate((h) => { h.addresses = h.addresses.filter((x) => x.id !== v); }, `Adres weg: ${a.name}`).catch(() => {}); break; }
     case 'place-search': void doPlaceSearch(); break;
     case 'share': sheet = { type: 'share' }; render(); break;
@@ -566,7 +564,6 @@ document.addEventListener('change', (e) => {
   if (!house) return;
   if (act === 'addr-sel') { ui.addr = el.value; render(); }
   else if (act === 'li-chain-sel') { ui.listChain = el.value; render(); }
-  else if (act === 'follow') { const sid = el.dataset.v!; const on = el.checked; house.mutate((h) => { const s = h.stores.find((x) => x.id === sid); if (s) s.follow = on; }, `${on ? 'Volg' : 'Volg niet meer'}: ${sid}`).catch(() => {}); }
   else if (act === 'radius') { const aid = el.dataset.v!; const r = parseFloat(el.value); house.mutate((h) => { const a = h.addresses.find((x) => x.id === aid); if (a) a.radius = r; }, 'Straal aangepast').catch(() => {}); }
   else if (el.id === 'sh-spec') saveItemSpec();
 });
@@ -576,9 +573,6 @@ document.addEventListener('input', (e) => {
   if (el.dataset.action === 'radius') { const lab = document.getElementById('rv-' + el.dataset.v); if (lab) lab.textContent = el.value + ' km'; }
   if (el.id === 'li-new') draft = el.value;
 });
-
-// open/dicht van "Niet gevolgd" onthouden, ook als het scherm opnieuw wordt opgebouwd
-document.addEventListener('toggle', (e) => { const d = e.target as HTMLDetailsElement; if (d.classList?.contains('unfollowed')) showUnfollowed = d.open; }, true);
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && sheet) { sheet = null; render(); }
