@@ -6,6 +6,7 @@ import type { Address, Deal, DealsFile, FolderLink, Household, Kind, ListFile, L
 import { parseEntry } from './parse.js';
 import { dealWhen } from './deals.js';
 import { addPurchase, learnedInterval } from './rhythm.js';
+import { unitLabel, unitPrice } from './unit.js';
 import { iconFor } from './art.js';
 import { distanceKm, searchAddress, type Place } from './geo.js';
 import { DAY, esc, eur, km, uid } from './util.js';
@@ -210,25 +211,36 @@ function relevantDeals(a: Address | null): { st: Store; d: number; items: { dl: 
 }
 
 const dealShop = (dl: Deal): string => dl.shop || chainName(dl.chain);
+/** Goedkoopste eerst: per kilo/liter als beide dat hebben, anders per verpakking */
+function compareValue(a: Deal, b: Deal): number {
+  const ua = unitPrice(a), ub = unitPrice(b);
+  if (ua && ub && ua.unit === ub.unit) return ua.value - ub.value;
+  return (a.effPrice ?? a.price ?? 999) - (b.effPrice ?? b.price ?? 999);
+}
+/** "€ 1,49 · € 10,98 per kilo" */
+function priceText(dl: Deal): string {
+  const up = unitPrice(dl);
+  return [dl.price !== null ? eur(dl.price) : '', up ? unitLabel(up) : ''].filter(Boolean).join(' · ');
+}
 /** Een actie telt mee als je een winkel van die keten volgt, of als het een online actie is */
 const dealVisible = (dl: Deal): boolean => dl.chain === 'online' || followedChains().includes(dl.chain);
 /** Alle lopende en komende acties voor een vast product: nu eerst, dan goedkoopst */
 function productDeals(p: Product): { dl: Deal; w: ReturnType<typeof dealWhen> }[] {
   return liveDeals().filter((dl) => dl.productId === p.id && dealVisible(dl)).map((dl) => ({ dl, w: dealWhen(dl) }))
-    .sort((x, y) => x.w.startsIn - y.w.startsIn || (x.dl.price ?? 999) - (y.dl.price ?? 999));
+    .sort((x, y) => Number(x.w.state === 'soon') - Number(y.w.state === 'soon') || compareValue(x.dl, y.dl) || x.w.startsIn - y.w.startsIn);
 }
 function productDealRow(p: Product, dl: Deal, w: ReturnType<typeof dealWhen>): string {
   const on = L().some((l) => l.dealId === dl.id && !l.done);
   const advice = w.state === 'soon' ? waitAdvice(p, w.startsIn) : '';
   return `<div class="pd-row"><div style="min-width:0">
-      <div class="meta"><span class="chip ${w.state === 'soon' ? 'soon' : 'ok'}">${esc(w.state === 'soon' ? w.short : 'Nu')}</span> <strong>${esc(dealShop(dl))}</strong> · ${esc([dl.mech, dl.price !== null ? eur(dl.price) : ''].filter(Boolean).join(' · '))}</div>
+      <div class="meta"><span class="chip ${w.state === 'soon' ? 'soon' : 'ok'}">${esc(w.state === 'soon' ? w.short : 'Nu')}</span> <strong>${esc(dealShop(dl))}</strong> · ${esc([dl.mech, priceText(dl)].filter(Boolean).join(' · '))}</div>
       <div class="meta when ${w.state}">${esc(w.label)}${dl.title && dl.title !== p.name ? ` · ${esc(dl.title)}` : ''}</div>
       ${dl.note ? `<div class="meta match">${esc(dl.note)}</div>` : ''}${advice ? `<div class="meta wait-tip">${esc(advice)}</div>` : ''}</div>
     <button class="btn small" data-action="deal-add" data-id="${esc(dl.id)}" ${on ? 'disabled' : ''}>${on ? 'Op de lijst' : 'Op lijstje'}</button></div>`;
 }
 
 function dealLine(dl: Deal): string {
-  return [dl.mech, dl.price !== null ? eur(dl.price) : '', dealWhen(dl).label].filter(Boolean).join(' · ');
+  return [dl.mech, priceText(dl), dealWhen(dl).label].filter(Boolean).join(' · ');
 }
 /** Kort advies: wachten op de actie of niet */
 function waitAdvice(p: Product, startsIn: number): string {
@@ -309,7 +321,7 @@ function dealRow(dl: Deal): string {
   const chip = dl.span && SPAN_CHIP[dl.span] ? `<span class="chip warn">${SPAN_CHIP[dl.span]}</span> ` : '';
   const mine = p ? '<span class="chip ok">Jouw product</span> ' : '';
   return `<div class="supply"><div style="min-width:0"><div class="name">${esc(p?.name ?? dl.title)}</div>
-    <div class="meta">${mine}${chip}${dl.shop ? `<strong>${esc(dl.shop)}</strong> · ` : ''}${esc([dl.mech, dl.price !== null ? eur(dl.price) : '', dl.normal && dl.price ? `was ${eur(dl.normal)}` : ''].filter(Boolean).join(' · '))}</div>
+    <div class="meta">${mine}${chip}${dl.shop ? `<strong>${esc(dl.shop)}</strong> · ` : ''}${esc([dl.mech, priceText(dl), dl.normal && dl.price ? `was ${eur(dl.normal)}` : ''].filter(Boolean).join(' · '))}</div>
     <div class="meta when ${w.state}">${esc(w.label)}</div>${dl.note ? `<div class="meta match">${esc(dl.note)}</div>` : ''}</div>
     <button class="btn small" data-action="deal-add" data-id="${esc(dl.id)}" ${on ? 'disabled' : ''}>${on ? 'Op de lijst' : 'Op lijstje'}</button></div>`;
 }
@@ -334,7 +346,7 @@ function viewDeals(): string {
   const upd = deals!.data.updatedAt ? new Date(deals!.data.updatedAt).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' }) : null;
   const cards = chains.map(({ c, ns }) => {
     const dls = liveDeals().filter((dl) => dl.chain === c && (!ui.dealsMine || product(dl.productId)))
-      .sort((x, y) => dealWhen(x).startsIn - dealWhen(y).startsIn || Number(!product(x.productId)) - Number(!product(y.productId)));
+      .sort((x, y) => dealWhen(x).startsIn - dealWhen(y).startsIn || Number(!product(x.productId)) - Number(!product(y.productId)) || (x.productId && x.productId === y.productId ? compareValue(x, y) : 0));
     const short = dls.filter((dl) => dl.span === 'dag' || dl.span === 'weekend');
     const week = dls.filter((dl) => !short.includes(dl) && dealWhen(dl).state === 'now');
     const next = dls.filter((dl) => !short.includes(dl) && dealWhen(dl).state === 'soon');

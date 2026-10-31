@@ -73,6 +73,11 @@ export interface Deal {
   shop?: string | null;
   /** Waarom deze actie bij het product past, bijv. "Stuk jong belegen, geen plakken" */
   note?: string | null;
+  /** Inhoud per verpakking (multipacks opgeteld), bijv. 0.5 met unit 'kg' of 3 met unit 'l' */
+  amount?: number | null;
+  unit?: 'kg' | 'l' | null;
+  /** Prijs per verpakking als je de actie benut, bijv. bij "2e halve prijs" 0,75 × de prijs */
+  effPrice?: number | null;
   url: string | null;
 }
 

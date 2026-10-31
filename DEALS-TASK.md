@@ -63,7 +63,10 @@ Je werkt in de repository `skwirl-data`. Daarin staat `household.json` met adres
       "until": "2026-11-08",
       "span": "week",
       "url": "https://www.ah.nl/bonus/folder",
-      "note": "Losse Jonagold, geen sap of moes"
+      "note": "Losse Jonagold, geen sap of moes",
+      "amount": 1.5,
+      "unit": "kg",
+      "effPrice": null
     }
   ]
 }
@@ -79,6 +82,10 @@ Je werkt in de repository `skwirl-data`. Daarin staat `household.json` met adres
    | `url` | de pagina waar je de actie zag |
    | `shop` | alleen bij `"chain": "online"`: de naam van de webshop |
    | `note` | bij vaste producten: waarom de actie past |
+   | `amount`, `unit` | inhoud per verpakking in `kg` of `l`, multipacks opgeteld: 500 g = `0.5` + `"kg"`, 2 × 1,5 L = `3` + `"l"`. Leeg laten bij stuks (zoals een tube crème) |
+   | `effPrice` | prijs per verpakking als je de actie benut: bij "2e halve prijs" 0,75 × `price`, bij "1+1 gratis" 0,5 × `price`, bij "3 voor € 5" € 1,67. Leeg als `price` al de actieprijs is |
+
+   De app rekent hiermee de prijs per kilo of liter uit en zet de voordeligste bovenaan. Vul `amount` en `unit` dus altijd in als de folder het gewicht of de inhoud noemt.
 
    Zet in `folders` per keten de link naar de folder of actiepagina van deze week, en van volgende week als die al online staat, met `from` en `until`. De app toont die als knop **Folder openen**.
 
