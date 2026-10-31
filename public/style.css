@@ -355,3 +355,11 @@ select.sel { border: 1px solid var(--line); background: var(--surface); border-r
 .folder-links .btn { text-decoration: none; color: var(--ink); }
 .meta.when { font-size: 12.5px; }
 .meta.when.soon { color: var(--pine); font-weight: 600; }
+.pd { padding: 10px 0; border-top: 1px solid var(--line); }
+.pd:first-of-type { border-top: 0; }
+.pd-name { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.pd-name .art { width: 30px; height: 30px; }
+.pd-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 6px 0 0 38px; }
+.prod-row .pd-row { padding-left: 0; }
+.meta.match { color: var(--muted); font-style: italic; }
+.prefs { display: flex; flex-wrap: wrap; gap: 2px 12px; }

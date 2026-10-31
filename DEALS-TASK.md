@@ -10,7 +10,16 @@ Een geplande Claude-taak vult `deals.json` in de privé-repository `skwirl-data`
 
 ## Opdracht voor Claude
 
-Je werkt in de repository `skwirl-data`. Daarin staat `household.json` met adressen, winkels (`stores`), ketens (`chains`) en vaste producten (`products`, met `where` = soorten winkels waar het mag; leeg = overal).
+Je werkt in de repository `skwirl-data`. Daarin staat `household.json` met adressen, winkels (`stores`), ketens (`chains`) en vaste producten (`products`). Per product:
+
+| Veld | Betekenis |
+|---|---|
+| `name`, `cat` | naam en categorie |
+| `where` | soorten winkels waar het mag (`super`, `drogist`, `online`, `slager`, `bouw`); leeg = overal |
+| `brand` | voorkeursmerk; leeg = maakt niet uit |
+| `wants` | wat de gebruiker precies wil, bijv. "groot stuk, jong belegen", "halfvol", "voor avondeten" |
+| `avoid` | wat juist niet, bijv. "plakken", "vleeswaren voor op brood" |
+| `loose` | los product zonder barcode (bijv. Jonagold): de soort telt, niet de verpakking |
 
 1. Lees `household.json` en de bestaande `deals.json`.
 2. Lees per keten van de winkels in `stores` de **hele folder**: alle acties, niet alleen die voor de vaste producten. Kijk naar:
@@ -18,8 +27,17 @@ Je werkt in de repository `skwirl-data`. Daarin staat `household.json` met adres
    - **komende acties**: de folder van volgende week zodra die online staat, bijvoorbeeld de AH-bonusfolder (`https://www.ah.nl/bonus/folder`) en de Vomar-folder van volgende week;
    - **dag- en weekendacties**, zoals de Vomar-dagknallers en de dag- en weekendacties van Kruidvat.
 
-   Gebruik alleen openbare pagina's (actiepagina's en folders). Log nergens in en haal per run niet meer dan ongeveer 60 pagina's op. Neem per keten en per week hooguit 60 acties op; kies dan eerst eten, drinken, drogisterij en huishouden.
-3. Koppel een actie aan een vast product (`productId`) alleen als je redelijk zeker bent dat het hetzelfde product is (merk, soort, maat) en het product bij die keten mag volgens `where`. Bij losse producten zoals Jonagold telt de soort, niet de verpakking. Andere acties krijgen `"productId": null` en een duidelijke `title` met merk en maat.
+   Gebruik alleen openbare pagina's (actiepagina's en folders). Log nergens in. Neem per keten en per week hooguit 60 acties op; kies dan eerst eten, drinken, drogisterij en huishouden.
+3. **Zoek voor elk vast product altijd naar acties**, ook als het niet op de boodschappenlijst staat, en koppel ze met `productId`. Denk na over wat er echt in de aanbieding is:
+   - Past het bij `wants` en niet bij `avoid`? Bijvoorbeeld: bij kaas met "groot stuk" en niet "plakken" telt "Old Amsterdam plakken 150 g" **niet**, en "Beemster jong belegen stuk 500 g" wel. Bij kipfilet "voor avondeten" telt "kipfilet naturel 1 kg" wel en "gerookte kipfilet broodbeleg" niet. Bij melk "halfvol" telt volle melk niet.
+   - Klopt het merk als `brand` is ingevuld? Een ander merk mag alleen als `wants` dat toelaat.
+   - Twijfel je, koppel dan niet en zet de actie zonder `productId` in de lijst.
+   - Schrijf in `note` in één korte zin waarom de actie past, bijv. "Stuk jong belegen 500 g, geen plakken".
+   - Acties voor vaste producten tellen niet mee voor de grens van 60 per keten: neem ze altijd op.
+
+   Andere acties krijgen `"productId": null` en een duidelijke `title` met merk en maat.
+
+   **Online:** voor producten met `online` in `where` zoek je breed bij Nederlandse webshops (bijvoorbeeld bol, Douglas, ICI Paris XL, Holland & Barrett, de webshops van drogisterijen, en prijsvergelijkers zoals beslist.nl of kieskeurig.nl). Zet zulke acties op `"chain": "online"` met de naam van de webshop in `shop`. Neem alleen echte acties op (korting, x+1 gratis, tijdelijk lagere prijs), niet de gewone prijs.
 4. Schrijf `deals.json` opnieuw:
    - Houd acties uit de bestaande `deals.json` die nog niet verlopen zijn, tenzij je nu iets beters of juisters vindt voor dezelfde `id`.
    - Laat verlopen acties weg (`until` ligt voor vandaag).
@@ -44,7 +62,8 @@ Je werkt in de repository `skwirl-data`. Daarin staat `household.json` met adres
       "from": "2026-11-02",
       "until": "2026-11-08",
       "span": "week",
-      "url": "https://www.ah.nl/bonus/folder"
+      "url": "https://www.ah.nl/bonus/folder",
+      "note": "Losse Jonagold, geen sap of moes"
     }
   ]
 }
@@ -58,10 +77,12 @@ Je werkt in de repository `skwirl-data`. Daarin staat `household.json` met adres
    | `from`, `until` | eerste en laatste dag, als `YYYY-MM-DD`. Altijd invullen als de folder het noemt; een AH-week loopt van maandag t/m zondag |
    | `span` | `"week"`, `"dag"` (één dag, zoals een dagknaller) of `"weekend"` |
    | `url` | de pagina waar je de actie zag |
+   | `shop` | alleen bij `"chain": "online"`: de naam van de webshop |
+   | `note` | bij vaste producten: waarom de actie past |
 
    Zet in `folders` per keten de link naar de folder of actiepagina van deze week, en van volgende week als die al online staat, met `from` en `until`. De app toont die als knop **Folder openen**.
 
-5. Verander niets aan `list.json` of `household.json`.
+5. Verander niets aan `list.json` of `household.json`. Haal per run niet meer dan ongeveer 80 pagina's op in totaal.
 6. Commit met het bericht `Aanbiedingen <datum>` en push naar `main`.
 7. Geef een korte samenvatting: hoeveel acties nu, hoeveel komende, welke dag- of weekendacties, en wat je niet kon vinden.
 

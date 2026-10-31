@@ -35,10 +35,18 @@ export interface Product {
   /** Waar het te koop is; leeg = maakt niet uit */
   where: Kind[];
   loose: boolean;
-  /** Dagen dat één keer kopen meegaat */
-  interval: number;
-  /** Doelprijs per stuk/verpakking in euro's, of null */
-  target: number | null;
+  /** Voorkeursmerk, bijv. "Campina"; leeg = maakt niet uit */
+  brand?: string | null;
+  /** Wat je precies wilt, bijv. "groot stuk, jong belegen" of "halfvol" */
+  wants?: string | null;
+  /** Wat juist niet, bijv. "plakken" of "vleeswaren voor op brood" */
+  avoid?: string | null;
+  /** Aankoopmomenten (ms), nieuwste achteraan; hieruit leert Skwirl je koopritme */
+  bought?: number[];
+  /** Oud veld: handmatig ingesteld aantal dagen; alleen gebruikt zolang er te weinig aankopen zijn */
+  interval?: number | null;
+  /** Oud veld, niet meer gebruikt */
+  target?: number | null;
   normal: number | null;
   lastBought: number | null;
   note: string | null;
@@ -61,6 +69,10 @@ export interface Deal {
   until: string | null;
   /** Soort actie; 'dag' en 'weekend' gelden kort */
   span: 'week' | 'dag' | 'weekend' | null;
+  /** Webshop bij chain 'online', bijv. "Douglas" */
+  shop?: string | null;
+  /** Waarom deze actie bij het product past, bijv. "Stuk jong belegen, geen plakken" */
+  note?: string | null;
   url: string | null;
 }
 

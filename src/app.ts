@@ -5,6 +5,7 @@ import { JsonFile, checkConnection, GitHubError, type Connection } from './githu
 import type { Address, Deal, DealsFile, FolderLink, Household, Kind, ListFile, ListItem, Product, Store } from './types.js';
 import { parseEntry } from './parse.js';
 import { dealWhen } from './deals.js';
+import { addPurchase, learnedInterval } from './rhythm.js';
 import { iconFor } from './art.js';
 import { distanceKm, searchAddress, type Place } from './geo.js';
 import { DAY, esc, eur, km, uid } from './util.js';
@@ -36,7 +37,7 @@ const FOLDER_PAGES: Record<string, string> = {
 };
 const KIND_ANY: Record<Kind, string> = { super: 'elke supermarkt', drogist: 'elke drogist', online: 'online', bouw: 'elke bouwmarkt', dier: 'elke dierenwinkel', slager: 'elke slager', overig: 'overal' };
 const KIND_NAME: Record<Kind, string> = { super: 'Supermarkt', drogist: 'Drogist', online: 'Online', bouw: 'Bouwmarkt', dier: 'Dierenwinkel', slager: 'Slager', overig: 'Overig' };
-const CATS = ['Groente & fruit', 'Zuivel & eieren', 'Brood & ontbijt', 'Voorraadkast', 'Vlees & vis', 'Dranken', 'Baby', 'Huisdieren',
+const CATS = ['Groente & fruit', 'Zuivel & eieren', 'Brood & ontbijt', 'Voorraadkast', 'Vlees & vis', 'Dranken', 'Baby',
   'Wasmiddel & schoonmaak', 'Persoonlijke verzorging', 'Sportvoeding', 'Contactlenzen', 'Klussen & tuin', 'Overig'];
 const QUICK = ['Bananen', 'Appels', 'Melk', 'Brood', 'Eieren', 'Kaas', 'Tomaten', 'Komkommer', 'Yoghurt', 'Mandarijnen', 'Boter', 'Koffie'];
 const SPEC_CHIPS = ['bio', 'groot', 'klein', 'light', 'vegan', '500 g', '1 kg', '500 ml', '1 liter'];
@@ -74,8 +75,8 @@ const $ = <E extends HTMLElement = HTMLElement>(sel: string): E => document.quer
 
 /* ---------- Afgeleide gegevens ---------- */
 
-const chainName = (c: string): string => H().chains[c]?.name ?? c;
-const kindOf = (c: string): Kind => H().chains[c]?.kind ?? 'overig';
+const chainName = (c: string): string => H().chains[c]?.name ?? (c === 'online' ? 'Online' : c);
+const kindOf = (c: string): Kind => H().chains[c]?.kind ?? (c === 'online' ? 'online' : 'overig');
 /** Ketens waarvan je minstens één winkel volgt; alleen die verschijnen in lijst, Vandaag en Folders */
 function followedChains(): string[] {
   const followed = new Set(H().stores.filter((s) => s.follow).map((s) => s.chain));
@@ -89,18 +90,23 @@ const currentAddr = (): Address | null => H().addresses.find((a) => a.id === ui.
 const currentChain = (): string => { const fc = followedChains(); return fc.includes(ui.listChain) ? ui.listChain : fc[0]; };
 const product = (id: string | null): Product | undefined => (id ? H().products.find((p) => p.id === id) : undefined);
 
+/** Dagen tussen aankopen: geleerd uit je aankopen, anders een eerder ingestelde waarde */
+const intervalOf = (p: Product): number | null => learnedInterval(p.bought) ?? p.interval ?? null;
 function daysLeft(p: Product): number | null {
-  if (!p.lastBought) return null;
-  return Math.round(p.interval - (Date.now() - p.lastBought) / DAY);
+  const iv = intervalOf(p);
+  if (!p.lastBought || !iv) return null;
+  return Math.round(iv - (Date.now() - p.lastBought) / DAY);
 }
+const ONLINE_STORE: Store = { id: 'online', chain: 'online', name: 'Online', place: 'webshops', type: 'Online', online: true, follow: true };
 function nearestStore(chain: string, a: Address | null): { st: Store; d: number } | null {
+  if (chain === 'online') return { st: ONLINE_STORE, d: 0 };
   const opts = H().stores.filter((s) => s.chain === chain && s.follow);
   if (!opts.length) return null;
   return opts.map((st) => ({ st, d: st.online || !a ? 0 : distanceKm(a, st) })).sort((x, y) => x.d - y.d)[0];
 }
 function statusOf(p: Product): { key: string; label: string } {
   const d = daysLeft(p);
-  if (d === null) return { key: 'meh', label: 'Nog niet bijgehouden' };
+  if (d === null) return { key: 'meh', label: p.lastBought ? 'Koopritme nog onbekend' : 'Nog niet gekocht via Skwirl' };
   if (d <= 0) return { key: 'danger', label: 'Op' };
   if (d <= 5) return { key: 'danger', label: `Nog ±${d} ${d === 1 ? 'dag' : 'dagen'}` };
   if (d <= 14) return { key: 'warn', label: `Nog ±${d} dagen` };
@@ -143,7 +149,7 @@ function takeOff(it: ListItem): void {
     if (old.length) d.items = d.items.filter((y) => !old.includes(y.id));
   }, `✓ ${it.name}`).catch(() => {});
   if (it.productId && product(it.productId)) {
-    house!.mutate((h) => { const p = h.products.find((x) => x.id === it.productId); if (p) p.lastBought = now; }, `Gekocht: ${it.name}`).catch(() => {});
+    house!.mutate((h) => { const p = h.products.find((x) => x.id === it.productId); if (p) { p.lastBought = now; p.bought = addPurchase(p.bought, now); } }, `Gekocht: ${it.name}`).catch(() => {});
   }
 }
 
@@ -191,7 +197,7 @@ function syncLabel(): string {
 /* ---------- Weergave: pagina's ---------- */
 
 function relevantDeals(a: Address | null): { st: Store; d: number; items: { dl: Deal; p: Product | undefined }[]; saving: number }[] {
-  const mine = liveDeals().filter((dl) => { if (dealWhen(dl).state !== 'now') return false; const p = product(dl.productId); if (!p) return false; const d = daysLeft(p); return d === null || d <= 14; });
+  const mine = liveDeals().filter((dl) => dealWhen(dl).state === 'now' && !!product(dl.productId) && dealVisible(dl));
   const byChain = new Map<string, Deal[]>();
   mine.forEach((dl) => byChain.set(dl.chain, (byChain.get(dl.chain) ?? []).concat(dl)));
   return [...byChain.entries()].map(([chain, dls]) => {
@@ -203,14 +209,26 @@ function relevantDeals(a: Address | null): { st: Store; d: number; items: { dl: 
   }).filter((x): x is NonNullable<typeof x> => !!x).sort((x, y) => y.items.length - x.items.length || y.saving - x.saving);
 }
 
+const dealShop = (dl: Deal): string => dl.shop || chainName(dl.chain);
+/** Een actie telt mee als je een winkel van die keten volgt, of als het een online actie is */
+const dealVisible = (dl: Deal): boolean => dl.chain === 'online' || followedChains().includes(dl.chain);
+/** Alle lopende en komende acties voor een vast product: nu eerst, dan goedkoopst */
+function productDeals(p: Product): { dl: Deal; w: ReturnType<typeof dealWhen> }[] {
+  return liveDeals().filter((dl) => dl.productId === p.id && dealVisible(dl)).map((dl) => ({ dl, w: dealWhen(dl) }))
+    .sort((x, y) => x.w.startsIn - y.w.startsIn || (x.dl.price ?? 999) - (y.dl.price ?? 999));
+}
+function productDealRow(p: Product, dl: Deal, w: ReturnType<typeof dealWhen>): string {
+  const on = L().some((l) => l.dealId === dl.id && !l.done);
+  const advice = w.state === 'soon' ? waitAdvice(p, w.startsIn) : '';
+  return `<div class="pd-row"><div style="min-width:0">
+      <div class="meta"><span class="chip ${w.state === 'soon' ? 'soon' : 'ok'}">${esc(w.state === 'soon' ? w.short : 'Nu')}</span> <strong>${esc(dealShop(dl))}</strong> · ${esc([dl.mech, dl.price !== null ? eur(dl.price) : ''].filter(Boolean).join(' · '))}</div>
+      <div class="meta when ${w.state}">${esc(w.label)}${dl.title && dl.title !== p.name ? ` · ${esc(dl.title)}` : ''}</div>
+      ${dl.note ? `<div class="meta match">${esc(dl.note)}</div>` : ''}${advice ? `<div class="meta wait-tip">${esc(advice)}</div>` : ''}</div>
+    <button class="btn small" data-action="deal-add" data-id="${esc(dl.id)}" ${on ? 'disabled' : ''}>${on ? 'Op de lijst' : 'Op lijstje'}</button></div>`;
+}
+
 function dealLine(dl: Deal): string {
   return [dl.mech, dl.price !== null ? eur(dl.price) : '', dealWhen(dl).label].filter(Boolean).join(' · ');
-}
-/** Komende acties voor je eigen producten bij winkels in de buurt, eerstvolgende eerst */
-function upcomingDeals(a: Address | null): { dl: Deal; p: Product; startsIn: number }[] {
-  return liveDeals().map((dl) => ({ dl, p: product(dl.productId)!, w: dealWhen(dl) }))
-    .filter(({ p, w, dl }) => p && w.state === 'soon' && followedChains().includes(dl.chain) && (() => { const ns = nearestStore(dl.chain, a); return !!ns && (ns.st.online || !a || ns.d <= a.radius); })())
-    .map(({ dl, p, w }) => ({ dl, p, startsIn: w.startsIn })).sort((x, y) => x.startsIn - y.startsIn);
 }
 /** Kort advies: wachten op de actie of niet */
 function waitAdvice(p: Product, startsIn: number): string {
@@ -240,24 +258,25 @@ function viewVandaag(): string {
       <button class="btn primary" data-action="deal-store" data-chain="${esc(best.st.chain)}">Op mijn lijstje</button></div></section>`;
   } else {
     const upd = deals!.data.updatedAt ? `Laatst bijgewerkt ${new Date(deals!.data.updatedAt).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long' })}.` : 'De geplande Claude-taak vult de aanbiedingen.';
-    hero = `<section class="card"><h2>Geen acties die nu lonen</h2><p class="sub">Er zijn geen aanbiedingen voor producten die je bijna nodig hebt bij winkels in de buurt. ${esc(upd)}</p></section>`;
+    hero = `<section class="card"><h2>Geen acties die nu lonen</h2><p class="sub">Er zijn nu geen aanbiedingen voor je vaste producten bij winkels in de buurt. ${esc(upd)}</p></section>`;
   }
   const others = ranked.slice(1, 4).map((r) => `<div class="card"><div class="section-head" style="margin:0"><h3>${esc(r.st.name)} ${esc(r.st.place)}</h3><span class="num" style="color:var(--muted);font-size:13px">${r.st.online ? 'online' : km(r.d)}</span></div>
       <p class="sub" style="font-size:13.5px">${r.items.map(({ dl, p }) => esc(p?.name ?? dl.title)).join(', ')}</p>
       <div class="deal-foot" style="margin-top:8px"><span class="num" style="color:var(--pine);font-weight:600">${r.saving ? '−' + eur(r.saving) : ''}</span><button class="btn small" data-action="deal-store" data-chain="${esc(r.st.chain)}">Op lijstje</button></div></div>`).join('');
 
-  const soon = upcomingDeals(a);
-  const soonCard = soon.length ? `<section class="card"><div class="section-head"><h2>Binnenkort in de aanbieding</h2><button class="btn small ghost" data-tab="deals">Alles</button></div>
-    ${soon.slice(0, 5).map(({ dl, p, startsIn }) => `<div class="supply"><div style="min-width:0"><div class="name">${esc(p.name)}</div>
-      <div class="meta"><span class="chip soon">${esc(dealWhen(dl).label)}</span> ${esc(chainName(dl.chain))} · ${esc([dl.mech, dl.price !== null ? eur(dl.price) : ''].filter(Boolean).join(' · '))}</div>
-      ${waitAdvice(p, startsIn) ? `<div class="meta wait-tip">${esc(waitAdvice(p, startsIn))}</div>` : ''}</div></div>`).join('')}</section>` : '';
+  // al je vaste producten met een lopende of komende actie, ook als ze niet op je lijstje staan
+  const onSale = H().products.map((p) => ({ p, ds: productDeals(p) })).filter((x) => x.ds.length)
+    .sort((x, y) => x.ds[0].w.startsIn - y.ds[0].w.startsIn);
+  const soonCard = onSale.length ? `<section class="card"><div class="section-head"><h2>Vaste producten in de aanbieding</h2><button class="btn small ghost" data-tab="producten">Alles</button></div>
+    ${onSale.slice(0, 8).map(({ p, ds }) => `<div class="pd"><div class="pd-name">${iconFor(p.name)}<span>${esc(p.name)}</span></div>
+      ${ds.slice(0, 2).map(({ dl, w }) => productDealRow(p, dl, w)).join('')}</div>`).join('')}</section>` : '';
 
   const tracked = H().products.filter((p) => daysLeft(p) !== null).sort((x, y) => daysLeft(x)! - daysLeft(y)!).slice(0, 6);
-  const supply = tracked.length ? tracked.map((p) => { const st = statusOf(p); const pct = Math.max(4, Math.min(100, (daysLeft(p)! / p.interval) * 100));
+  const supply = tracked.length ? tracked.map((p) => { const st = statusOf(p); const pct = Math.max(4, Math.min(100, (daysLeft(p)! / intervalOf(p)!) * 100));
     const color = ({ danger: 'var(--danger)', warn: 'var(--warn)', ok: 'var(--ok)' } as Record<string, string>)[st.key] ?? 'var(--line)';
     return `<div class="supply"><div style="min-width:0"><div class="name">${esc(p.name)}</div><div class="meta">${esc(dealHint(p) || (p.where.length ? anyLabel(p.where) : 'Overal'))}</div></div>
       <button class="btn small" data-action="prod-list" data-id="${esc(p.id)}">Op de lijst</button><div class="bar"><span style="width:${pct}%;background:${color}"></span></div></div>`; }).join('')
-    : '<p class="sub" style="font-size:13.5px">Zodra je een vast product van de lijst tikt, houdt Skwirl bij wanneer het weer op is.</p>';
+    : '<p class="sub" style="font-size:13.5px">Tik je een vast product een paar keer van de lijst, dan leert Skwirl hoe snel het op gaat.</p>';
 
   return `<div class="section-head"><div><div class="eyebrow">${esc(dateStr)}</div><h1>Dit loont nu</h1></div></div>
     <div class="grid-2"><div class="stack">${listCard}${hero}
@@ -267,10 +286,8 @@ function viewVandaag(): string {
 
 /** "Nu bij AH, t/m zo" of "Vanaf ma bij Vomar" voor een product */
 function dealHint(p: Product): string {
-  const ds = liveDeals().filter((dl) => dl.productId === p.id && followedChains().includes(dl.chain)).map((dl) => ({ dl, w: dealWhen(dl) }))
-    .sort((x, y) => x.w.startsIn - y.w.startsIn);
-  const d = ds[0]; if (!d) return '';
-  return d.w.state === 'now' ? `In de aanbieding bij ${chainName(d.dl.chain)}${d.w.short ? ', ' + d.w.short : ''}` : `${d.w.short.charAt(0).toUpperCase() + d.w.short.slice(1)} in de aanbieding bij ${chainName(d.dl.chain)}`;
+  const d = productDeals(p)[0]; if (!d) return '';
+  return d.w.state === 'now' ? `In de aanbieding bij ${dealShop(d.dl)}${d.w.short ? ', ' + d.w.short : ''}` : `${d.w.short.charAt(0).toUpperCase() + d.w.short.slice(1)} in de aanbieding bij ${dealShop(d.dl)}`;
 }
 
 function viewLijstje(): string {
@@ -292,8 +309,8 @@ function dealRow(dl: Deal): string {
   const chip = dl.span && SPAN_CHIP[dl.span] ? `<span class="chip warn">${SPAN_CHIP[dl.span]}</span> ` : '';
   const mine = p ? '<span class="chip ok">Jouw product</span> ' : '';
   return `<div class="supply"><div style="min-width:0"><div class="name">${esc(p?.name ?? dl.title)}</div>
-    <div class="meta">${mine}${chip}${esc([dl.mech, dl.price !== null ? eur(dl.price) : '', dl.normal && dl.price ? `was ${eur(dl.normal)}` : ''].filter(Boolean).join(' · '))}</div>
-    <div class="meta when ${w.state}">${esc(w.label)}</div></div>
+    <div class="meta">${mine}${chip}${dl.shop ? `<strong>${esc(dl.shop)}</strong> · ` : ''}${esc([dl.mech, dl.price !== null ? eur(dl.price) : '', dl.normal && dl.price ? `was ${eur(dl.normal)}` : ''].filter(Boolean).join(' · '))}</div>
+    <div class="meta when ${w.state}">${esc(w.label)}</div>${dl.note ? `<div class="meta match">${esc(dl.note)}</div>` : ''}</div>
     <button class="btn small" data-action="deal-add" data-id="${esc(dl.id)}" ${on ? 'disabled' : ''}>${on ? 'Op de lijst' : 'Op lijstje'}</button></div>`;
 }
 
@@ -311,7 +328,8 @@ function viewDeals(): string {
   const a = currentAddr();
   // winkels met acties eerst, online achteraan, verder op afstand
   const hasDeals = (c: string): boolean => liveDeals().some((dl) => dl.chain === c && (!ui.dealsMine || product(dl.productId)));
-  const chains = followedChains().map((c) => ({ c, ns: nearestStore(c, a) }))
+  const chainKeys = followedChains().concat(liveDeals().some((dl) => dl.chain === 'online') ? ['online'] : []);
+  const chains = chainKeys.map((c) => ({ c, ns: nearestStore(c, a) }))
     .sort((x, y) => Number(!hasDeals(x.c)) - Number(!hasDeals(y.c)) || Number(!!x.ns?.st.online) - Number(!!y.ns?.st.online) || (x.ns?.d ?? 99) - (y.ns?.d ?? 99));
   const upd = deals!.data.updatedAt ? new Date(deals!.data.updatedAt).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' }) : null;
   const cards = chains.map(({ c, ns }) => {
@@ -323,7 +341,7 @@ function viewDeals(): string {
     const part = (title: string, list: Deal[]): string => list.length ? `<div class="basket-head">${title}</div>${list.map(dealRow).join('')}` : '';
     const links = folderLinks(c);
     return `<section class="card folder-card">
-      <div class="section-head" style="margin-bottom:4px"><div><h2>${esc(chainName(c))}</h2><span class="unit">${ns ? (ns.st.online ? 'Online' : `${esc(ns.st.place)}, ${km(ns.d)}`) : ''}</span></div></div>
+      <div class="section-head" style="margin-bottom:4px"><div><h2>${esc(chainName(c))}</h2><span class="unit">${ns ? (c === 'online' ? 'Alle webshops' : ns.st.online ? 'Online' : `${esc(ns.st.place)}, ${km(ns.d)}`) : ''}</span></div></div>
       ${links.length ? `<div class="folder-links">${links.map((l) => `<a class="btn small" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)} ↗</a>`).join('')}</div>` : ''}
       ${part('Dag- en weekendacties', short)}${part('Deze week', week)}${part('Volgende week', next)}
       ${dls.length ? '' : `<p class="sub" style="font-size:13.5px">${ui.dealsMine ? 'Geen acties voor je eigen producten.' : 'Nog geen acties opgehaald.'}</p>`}</section>`;
@@ -337,11 +355,13 @@ function viewProducten(): string {
   const rows = H().products.slice().sort((x, y) => (daysLeft(x) ?? 999) - (daysLeft(y) ?? 999) || x.name.localeCompare(y.name)).map((p) => {
     const st = statusOf(p);
     return `<div class="prod-row">${iconFor(p.name)}<div style="min-width:0"><div style="font-weight:700">${esc(p.name)}</div>
-      <div class="unit">${p.where.length ? esc(anyLabel(p.where)) : 'Overal'} · ${p.interval >= 300 ? 'jaarlijks' : `gaat ±${p.interval} dagen mee`}${p.target ? ` · doel ${eur(p.target)}` : ''}</div>
-      <div class="where-tag"><span class="chip ${st.key}">${esc(st.label)}</span>${p.loose ? '<span class="chip">Los, zonder barcode</span>' : ''}</div></div>
+      <div class="unit">${esc([p.brand, p.where.length ? anyLabel(p.where) : 'Overal', learnedInterval(p.bought) ? `koop je ±elke ${learnedInterval(p.bought)} dagen` : ''].filter(Boolean).join(' · '))}</div>
+      ${p.wants || p.avoid ? `<div class="unit prefs">${p.wants ? `<span>Wel: ${esc(p.wants)}</span>` : ''}${p.avoid ? `<span>Niet: ${esc(p.avoid)}</span>` : ''}</div>` : ''}
+      <div class="where-tag"><span class="chip ${st.key}">${esc(st.label)}</span>${p.loose ? '<span class="chip">Los, zonder barcode</span>' : ''}</div>
+      ${productDeals(p).slice(0, 2).map(({ dl, w }) => productDealRow(p, dl, w)).join('')}</div>
       <div class="prod-actions"><button class="btn small" data-action="prod-list" data-id="${esc(p.id)}">Op de lijst</button><button class="btn small ghost" data-action="prod-edit" data-id="${esc(p.id)}">Bewerken</button></div></div>`;
   }).join('');
-  return `<div class="section-head"><div><h1>Vaste producten</h1><p class="sub">Wat je steeds opnieuw koopt. Tik je het van de lijst, dan weet Skwirl wanneer het weer op is.</p></div>
+  return `<div class="section-head"><div><h1>Vaste producten</h1><p class="sub">Wat je steeds opnieuw koopt. Skwirl leert hoe vaak je het koopt en zoekt de acties die passen bij wat je wilt.</p></div>
     <button class="btn primary" data-action="prod-new">Product toevoegen</button></div>
     <section class="card">${rows || '<div class="empty">Nog geen vaste producten. Voeg toe wat je steeds opnieuw koopt.</div>'}</section>`;
 }
@@ -391,16 +411,20 @@ function sheetHtml(): string {
   }
 
   if (sheet.type === 'product') {
-    const p = product(sheet.id) ?? { id: '', name: '', cat: 'Overig', where: [], loose: false, interval: 14, target: null, normal: null, lastBought: null, note: null } as Product;
-    const kinds = Object.keys(KIND_NAME) as Kind[];
+    const p = product(sheet.id) ?? { id: '', name: '', cat: 'Overig', where: [], loose: false, normal: null, lastBought: null, note: null } as Product;
+    const kinds: Kind[] = ['super', 'drogist', 'online', 'slager', 'bouw'];
+    const iv = learnedInterval(p.bought);
     return wrap(sheet.id ? p.name : 'Product toevoegen', `<form id="prod-form" class="sheet-form">
       <label>Naam<input name="name" required maxlength="80" value="${esc(p.name)}" placeholder="Bijv. Jonagold appels"></label>
       <label>Categorie<select name="cat">${CATS.map((c) => `<option ${c === p.cat ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
-      <fieldset><legend>Te koop bij</legend><div class="quick">${kinds.filter((k) => k !== 'overig').map((k) => `<label class="chk-chip"><input type="checkbox" name="where" value="${k}" ${p.where.includes(k) ? 'checked' : ''}> ${esc(KIND_NAME[k])}</label>`).join('')}</div>
+      <label>Merk<input name="brand" maxlength="40" value="${esc(p.brand ?? '')}" placeholder="Leeg = maakt niet uit"></label>
+      <label>Wat wil je precies?<input name="wants" maxlength="120" value="${esc(p.wants ?? '')}" placeholder="Bijv. groot stuk, jong belegen · halfvol · voor avondeten"></label>
+      <label>Wat juist niet?<input name="avoid" maxlength="120" value="${esc(p.avoid ?? '')}" placeholder="Bijv. plakken · vleeswaren voor op brood"></label>
+      <p class="hint">Hiermee kiest de aanbiedingen-taak alleen acties die echt bij je passen.</p>
+      <fieldset><legend>Te koop bij</legend><div class="quick">${kinds.map((k) => `<label class="chk-chip"><input type="checkbox" name="where" value="${k}" ${p.where.includes(k) ? 'checked' : ''}> ${esc(KIND_NAME[k])}</label>`).join('')}</div>
         <p class="hint">Niets aangevinkt = maakt niet uit waar.</p></fieldset>
       <label class="chk"><input type="checkbox" name="loose" ${p.loose ? 'checked' : ''}> Los, zonder barcode</label>
-      <div class="two"><label>Gaat mee (dagen)<input name="interval" type="number" min="1" max="400" required value="${p.interval}"></label>
-      <label>Doelprijs (€)<input name="target" type="number" min="0" step="0.01" value="${p.target ?? ''}"></label></div>
+      ${sheet.id ? `<p class="hint">${iv ? `Je koopt dit ongeveer elke ${iv} dagen (geleerd uit ${p.bought!.length} aankopen).` : 'Skwirl leert hoe vaak je dit koopt zodra je het een paar keer van de lijst tikt.'}</p>` : ''}
       <div class="sheet-foot">${sheet.id ? '<button type="button" class="btn" data-action="prod-del">Verwijderen</button>' : ''}${sheet.id ? '<button type="button" class="btn" data-action="prod-bought">Net gekocht</button>' : ''}<button class="btn primary" type="submit">Opslaan</button></div></form>`, sheet.id ? iconFor(p.name) : '');
   }
 
@@ -590,9 +614,11 @@ document.addEventListener('click', (e) => {
     case 'prod-del': if (sheet?.type === 'product' && sheet.id) { const pid = sheet.id; const name = product(pid)?.name; sheet = null;
       house.mutate((h) => { h.products = h.products.filter((p) => p.id !== pid); }, `Product weg: ${name}`).catch(() => {}); } break;
     case 'prod-bought': if (sheet?.type === 'product' && sheet.id) { const pid = sheet.id; const now = Date.now(); sheet = null;
-      house.mutate((h) => { const p = h.products.find((x) => x.id === pid); if (p) p.lastBought = now; }, 'Net gekocht').catch(() => {}); toast('Bijgehouden: net gekocht'); } break;
+      house.mutate((h) => { const p = h.products.find((x) => x.id === pid); if (p) { p.lastBought = now; p.bought = addPurchase(p.bought, now); } }, 'Net gekocht').catch(() => {}); toast('Bijgehouden: net gekocht'); } break;
     case 'deal-add': { const dl = D().find((x) => x.id === id); if (!dl) return; const p = product(dl.productId);
-      addItem({ name: p?.name ?? dl.title, productId: p?.id ?? null, dealId: dl.id, chain: dl.chain, kinds: null }, dl.chain); toast(`Op je ${chainName(dl.chain)}-lijst gezet`); break; }
+      const online = dl.chain === 'online';
+      addItem({ name: p?.name ?? dl.title, productId: p?.id ?? null, dealId: dl.id, chain: online ? null : dl.chain, kinds: online ? ['online'] : null, spec: dl.shop ?? null }, online ? currentChain() : dl.chain);
+      toast(`Op je ${online ? 'online' : chainName(dl.chain)}-lijst gezet`); break; }
     case 'deal-store': { const r = relevantDeals(currentAddr()).find((x) => x.st.chain === el.dataset.chain); if (!r) return;
       r.items.filter(({ dl }) => !L().some((l) => l.dealId === dl.id && !l.done)).forEach(({ dl, p }) => addItem({ name: p?.name ?? dl.title, productId: p?.id ?? null, dealId: dl.id, chain: dl.chain, kinds: null }, dl.chain));
       ui.listChain = r.st.chain; toast(`${r.items.length} producten op je ${chainName(r.st.chain)}-lijst gezet`); render(); break; }
@@ -661,14 +687,13 @@ document.addEventListener('submit', (e) => {
   }
   if (form.id === 'prod-form' && sheet?.type === 'product') {
     const pid = sheet.id ?? uid('p');
-    const target = parseFloat(get('target'));
-    const fields = { name: get('name'), cat: get('cat'), where: fd.getAll('where').map(String) as Kind[], loose: fd.get('loose') === 'on', interval: Math.max(1, parseInt(get('interval'), 10) || 14), target: target > 0 ? target : null };
+    const fields = { name: get('name'), brand: get('brand') || null, wants: get('wants') || null, avoid: get('avoid') || null, cat: get('cat'), where: fd.getAll('where').map(String) as Kind[], loose: fd.get('loose') === 'on' };
     if (!fields.name) { toast('Geef het product een naam'); return; }
     const isNew = !sheet.id; sheet = null;
     house.mutate((h) => {
       const p = h.products.find((x) => x.id === pid);
       if (p) Object.assign(p, fields);
-      else h.products.push({ id: pid, normal: null, lastBought: null, note: null, ...fields });
+      else h.products.push({ id: pid, normal: null, lastBought: null, note: null, bought: [], ...fields });
     }, `${isNew ? 'Nieuw product' : 'Product'}: ${fields.name}`).catch(() => {});
     toast(isNew ? `${fields.name} toegevoegd` : 'Opgeslagen');
     return;

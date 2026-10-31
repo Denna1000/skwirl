@@ -1,6 +1,6 @@
 // Service worker: de app zelf werkt ook zonder netwerk. Gegevens (GitHub, PDOK) gaan altijd over het netwerk.
 const CACHE = 'skwirl-__VERSION__';
-const SHELL = ['./', 'index.html', 'style.css', 'manifest.webmanifest', 'icons/icon.svg', 'js/app.js', 'js/deals.js', 'js/github.js', 'js/art.js', 'js/geo.js', 'js/parse.js', 'js/util.js'];
+const SHELL = ['./', 'index.html', 'style.css', 'manifest.webmanifest', 'icons/icon.svg', 'js/app.js', 'js/deals.js', 'js/rhythm.js', 'js/github.js', 'js/art.js', 'js/geo.js', 'js/parse.js', 'js/util.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
