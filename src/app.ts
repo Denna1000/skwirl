@@ -38,8 +38,6 @@ const FOLDER_PAGES: Record<string, string> = {
 };
 const KIND_ANY: Record<Kind, string> = { super: 'elke supermarkt', drogist: 'elke drogist', online: 'online', bouw: 'elke bouwmarkt', dier: 'elke dierenwinkel', slager: 'elke slager', overig: 'overal' };
 const KIND_NAME: Record<Kind, string> = { super: 'Supermarkt', drogist: 'Drogist', online: 'Online', bouw: 'Bouwmarkt', dier: 'Dierenwinkel', slager: 'Slager', overig: 'Overig' };
-const CATS = ['Groente & fruit', 'Zuivel & eieren', 'Brood & ontbijt', 'Voorraadkast', 'Vlees & vis', 'Dranken', 'Baby',
-  'Wasmiddel & schoonmaak', 'Persoonlijke verzorging', 'Sportvoeding', 'Contactlenzen', 'Klussen & tuin', 'Overig'];
 const QUICK = ['Bananen', 'Appels', 'Melk', 'Brood', 'Eieren', 'Kaas', 'Tomaten', 'Komkommer', 'Yoghurt', 'Mandarijnen', 'Boter', 'Koffie'];
 const SPEC_CHIPS = ['bio', 'groot', 'klein', 'light', 'vegan', '500 g', '1 kg', '500 ml', '1 liter'];
 
@@ -423,12 +421,11 @@ function sheetHtml(): string {
   }
 
   if (sheet.type === 'product') {
-    const p = product(sheet.id) ?? { id: '', name: '', cat: 'Overig', where: [], loose: false, normal: null, lastBought: null, note: null } as Product;
+    const p = product(sheet.id) ?? { id: '', name: '', where: [], loose: false, normal: null, lastBought: null, note: null } as Product;
     const kinds: Kind[] = ['super', 'drogist', 'online', 'slager', 'bouw'];
     const iv = learnedInterval(p.bought);
     return wrap(sheet.id ? p.name : 'Product toevoegen', `<form id="prod-form" class="sheet-form">
       <label>Naam<input name="name" required maxlength="80" value="${esc(p.name)}" placeholder="Bijv. Jonagold appels"></label>
-      <label>Categorie<select name="cat">${CATS.map((c) => `<option ${c === p.cat ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
       <label>Merk<input name="brand" maxlength="40" value="${esc(p.brand ?? '')}" placeholder="Leeg = maakt niet uit"></label>
       <label>Wat wil je precies?<input name="wants" maxlength="120" value="${esc(p.wants ?? '')}" placeholder="Bijv. groot stuk, jong belegen · halfvol · voor avondeten"></label>
       <label>Wat juist niet?<input name="avoid" maxlength="120" value="${esc(p.avoid ?? '')}" placeholder="Bijv. plakken · vleeswaren voor op brood"></label>
@@ -699,7 +696,7 @@ document.addEventListener('submit', (e) => {
   }
   if (form.id === 'prod-form' && sheet?.type === 'product') {
     const pid = sheet.id ?? uid('p');
-    const fields = { name: get('name'), brand: get('brand') || null, wants: get('wants') || null, avoid: get('avoid') || null, cat: get('cat'), where: fd.getAll('where').map(String) as Kind[], loose: fd.get('loose') === 'on' };
+    const fields = { name: get('name'), brand: get('brand') || null, wants: get('wants') || null, avoid: get('avoid') || null, where: fd.getAll('where').map(String) as Kind[], loose: fd.get('loose') === 'on' };
     if (!fields.name) { toast('Geef het product een naam'); return; }
     const isNew = !sheet.id; sheet = null;
     house.mutate((h) => {

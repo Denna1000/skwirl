@@ -31,7 +31,8 @@ export interface Store { id: string; chain: string; name: string; place: string;
 export interface Product {
   id: string;
   name: string;
-  cat: string;
+  /** Oud veld, niet meer gebruikt */
+  cat?: string;
   /** Waar het te koop is; leeg = maakt niet uit */
   where: Kind[];
   loose: boolean;

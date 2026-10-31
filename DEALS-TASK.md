@@ -14,7 +14,7 @@ Je werkt in de repository `skwirl-data`. Daarin staat `household.json` met adres
 
 | Veld | Betekenis |
 |---|---|
-| `name`, `cat` | naam en categorie |
+| `name` | naam |
 | `where` | soorten winkels waar het mag (`super`, `drogist`, `online`, `slager`, `bouw`); leeg = overal |
 | `brand` | voorkeursmerk; leeg = maakt niet uit |
 | `wants` | wat de gebruiker precies wil, bijv. "groot stuk, jong belegen", "halfvol", "voor avondeten" |
