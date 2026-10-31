@@ -704,7 +704,7 @@ document.addEventListener('submit', (e) => {
       if (p) Object.assign(p, fields);
       else h.products.push({ id: pid, normal: null, lastBought: null, note: null, bought: [], ...fields });
     }, `${isNew ? 'Nieuw product' : 'Product'}: ${fields.name}`).catch(() => {});
-    toast(isNew ? `${fields.name} toegevoegd` : 'Opgeslagen');
+    toast(isNew ? `${fields.name} toegevoegd. Skwirl zoekt nu acties, dat duurt een paar minuten.` : 'Opgeslagen. Skwirl zoekt opnieuw acties.');
     return;
   }
   if ((form.id === 'addr-form' || form.id === 'store-form') && placeResults.length) {
