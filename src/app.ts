@@ -4,6 +4,7 @@
 import { JsonFile, checkConnection, GitHubError, type Connection } from './github.js';
 import type { Address, Deal, DealsFile, Household, Kind, ListFile, ListItem, Product, Store } from './types.js';
 import { parseEntry } from './parse.js';
+import { dealWhen } from './deals.js';
 import { iconFor } from './art.js';
 import { distanceKm, searchAddress, type Place } from './geo.js';
 import { DAY, esc, eur, km, uid } from './util.js';
@@ -61,6 +62,8 @@ let pollTimer: number | undefined;
 const H = (): Household => house!.data;
 const L = (): ListItem[] => list!.data.items;
 const D = (): Deal[] => deals!.data.deals;
+/** Acties die nu lopen of nog komen; verlopen acties tellen nergens mee */
+const liveDeals = (): Deal[] => D().filter((dl) => dealWhen(dl).state !== 'expired');
 const $ = <E extends HTMLElement = HTMLElement>(sel: string): E => document.querySelector(sel) as E;
 
 /* ---------- Afgeleide gegevens ---------- */
@@ -142,7 +145,7 @@ function takeOff(it: ListItem): void {
 
 function tile(l: ListItem): string {
   const dl = l.dealId ? D().find((d) => d.id === l.dealId) : null;
-  const sp = [l.spec, dl ? dl.mech : (!l.kinds && l.chain && multiChain(kindOf(l.chain)) ? 'Alleen hier' : '')].filter(Boolean).join(' · ');
+  const sp = [l.spec, dl ? [dl.mech, dealWhen(dl).short].filter(Boolean).join(' ') : (!l.kinds && l.chain && multiChain(kindOf(l.chain)) ? 'Alleen hier' : '')].filter(Boolean).join(' · ');
   const out = l.done;
   return `<button class="tile ${out ? 'sug' : ''}" data-action="${out ? 'li-in' : 'li-out'}" data-id="${esc(l.id)}" aria-label="${esc(l.name)}${l.spec ? ', ' + esc(l.spec) : ''}${l.qty > 1 ? `, ${l.qty} stuks` : ''}: ${out ? 'op de lijst zetten' : 'van de lijst halen'}">
     ${!out && l.qty > 1 ? `<span class="q num">${l.qty}×</span>` : ''}${iconFor(l.name)}<span class="nm">${esc(l.name)}</span>${sp ? `<span class="sp">${esc(sp)}</span>` : ''}</button>`;
@@ -182,7 +185,7 @@ function syncLabel(): string {
 /* ---------- Weergave: pagina's ---------- */
 
 function relevantDeals(a: Address | null): { st: Store; d: number; items: { dl: Deal; p: Product | undefined }[]; saving: number }[] {
-  const mine = D().filter((dl) => { const p = product(dl.productId); if (!p) return false; const d = daysLeft(p); return d === null || d <= 14; });
+  const mine = liveDeals().filter((dl) => { if (dealWhen(dl).state !== 'now') return false; const p = product(dl.productId); if (!p) return false; const d = daysLeft(p); return d === null || d <= 14; });
   const byChain = new Map<string, Deal[]>();
   mine.forEach((dl) => byChain.set(dl.chain, (byChain.get(dl.chain) ?? []).concat(dl)));
   return [...byChain.entries()].map(([chain, dls]) => {
@@ -195,8 +198,21 @@ function relevantDeals(a: Address | null): { st: Store; d: number; items: { dl: 
 }
 
 function dealLine(dl: Deal): string {
-  return [dl.mech, dl.price !== null ? eur(dl.price) : '', dl.until ? `t/m ${dl.until}` : ''].filter(Boolean).join(' · ');
+  return [dl.mech, dl.price !== null ? eur(dl.price) : '', dealWhen(dl).label].filter(Boolean).join(' · ');
 }
+/** Komende acties voor je eigen producten bij winkels in de buurt, eerstvolgende eerst */
+function upcomingDeals(a: Address | null): { dl: Deal; p: Product; startsIn: number }[] {
+  return liveDeals().map((dl) => ({ dl, p: product(dl.productId)!, w: dealWhen(dl) }))
+    .filter(({ p, w, dl }) => p && w.state === 'soon' && followedChains().includes(dl.chain) && (() => { const ns = nearestStore(dl.chain, a); return !!ns && (ns.st.online || !a || ns.d <= a.radius); })())
+    .map(({ dl, p, w }) => ({ dl, p, startsIn: w.startsIn })).sort((x, y) => x.startsIn - y.startsIn);
+}
+/** Kort advies: wachten op de actie of niet */
+function waitAdvice(p: Product, startsIn: number): string {
+  const left = daysLeft(p);
+  if (left === null) return '';
+  return left >= startsIn ? 'Wacht even, je hebt nog genoeg.' : 'Eerder op. Koop nu alleen wat je nodig hebt.';
+}
+const SPAN_CHIP: Record<string, string> = { dag: 'Dagactie', weekend: 'Weekend' };
 
 function viewVandaag(): string {
   const a = currentAddr();
@@ -217,24 +233,38 @@ function viewVandaag(): string {
       <div class="hero-foot"><div class="hero-total">${best.saving ? `Je bespaart hier<strong class="num">${eur(best.saving)}</strong>` : ''}</div>
       <button class="btn primary" data-action="deal-store" data-chain="${esc(best.st.chain)}">Op mijn lijstje</button></div></section>`;
   } else {
-    const upd = deals!.data.updatedAt ? `Laatst bijgewerkt ${new Date(deals!.data.updatedAt).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long' })}.` : 'De wekelijkse Claude-taak vult de aanbiedingen.';
+    const upd = deals!.data.updatedAt ? `Laatst bijgewerkt ${new Date(deals!.data.updatedAt).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long' })}.` : 'De geplande Claude-taak vult de aanbiedingen.';
     hero = `<section class="card"><h2>Geen acties die nu lonen</h2><p class="sub">Er zijn geen aanbiedingen voor producten die je bijna nodig hebt bij winkels in de buurt. ${esc(upd)}</p></section>`;
   }
   const others = ranked.slice(1, 4).map((r) => `<div class="card"><div class="section-head" style="margin:0"><h3>${esc(r.st.name)} ${esc(r.st.place)}</h3><span class="num" style="color:var(--muted);font-size:13px">${r.st.online ? 'online' : km(r.d)}</span></div>
       <p class="sub" style="font-size:13.5px">${r.items.map(({ dl, p }) => esc(p?.name ?? dl.title)).join(', ')}</p>
       <div class="deal-foot" style="margin-top:8px"><span class="num" style="color:var(--pine);font-weight:600">${r.saving ? '−' + eur(r.saving) : ''}</span><button class="btn small" data-action="deal-store" data-chain="${esc(r.st.chain)}">Op lijstje</button></div></div>`).join('');
 
+  const soon = upcomingDeals(a);
+  const soonCard = soon.length ? `<section class="card"><div class="section-head"><h2>Binnenkort in de aanbieding</h2><button class="btn small ghost" data-tab="deals">Alles</button></div>
+    ${soon.slice(0, 5).map(({ dl, p, startsIn }) => `<div class="supply"><div style="min-width:0"><div class="name">${esc(p.name)}</div>
+      <div class="meta"><span class="chip soon">${esc(dealWhen(dl).label)}</span> ${esc(chainName(dl.chain))} · ${esc([dl.mech, dl.price !== null ? eur(dl.price) : ''].filter(Boolean).join(' · '))}</div>
+      ${waitAdvice(p, startsIn) ? `<div class="meta wait-tip">${esc(waitAdvice(p, startsIn))}</div>` : ''}</div></div>`).join('')}</section>` : '';
+
   const tracked = H().products.filter((p) => daysLeft(p) !== null).sort((x, y) => daysLeft(x)! - daysLeft(y)!).slice(0, 6);
   const supply = tracked.length ? tracked.map((p) => { const st = statusOf(p); const pct = Math.max(4, Math.min(100, (daysLeft(p)! / p.interval) * 100));
     const color = ({ danger: 'var(--danger)', warn: 'var(--warn)', ok: 'var(--ok)' } as Record<string, string>)[st.key] ?? 'var(--line)';
-    return `<div class="supply"><div style="min-width:0"><div class="name">${esc(p.name)}</div><div class="meta">${p.where.length ? esc(anyLabel(p.where)) : 'Overal'}</div></div>
+    return `<div class="supply"><div style="min-width:0"><div class="name">${esc(p.name)}</div><div class="meta">${esc(dealHint(p) || (p.where.length ? anyLabel(p.where) : 'Overal'))}</div></div>
       <button class="btn small" data-action="prod-list" data-id="${esc(p.id)}">Op de lijst</button><div class="bar"><span style="width:${pct}%;background:${color}"></span></div></div>`; }).join('')
     : '<p class="sub" style="font-size:13.5px">Zodra je een vast product van de lijst tikt, houdt Skwirl bij wanneer het weer op is.</p>';
 
   return `<div class="section-head"><div><div class="eyebrow">${esc(dateStr)}</div><h1>Dit loont nu</h1></div></div>
     <div class="grid-2"><div class="stack">${listCard}${hero}
       ${others ? `<div class="eyebrow" style="margin-top:6px">Ook in de buurt</div><div class="deal-grid">${others}</div>` : ''}</div>
-      <div class="stack"><section class="card"><div class="section-head"><h2>Bijna op</h2><button class="btn small ghost" data-tab="producten">Alles</button></div>${supply}</section></div></div>`;
+      <div class="stack">${soonCard}<section class="card"><div class="section-head"><h2>Bijna op</h2><button class="btn small ghost" data-tab="producten">Alles</button></div>${supply}</section></div></div>`;
+}
+
+/** "Nu bij AH, t/m zo" of "Vanaf ma bij Vomar" voor een product */
+function dealHint(p: Product): string {
+  const ds = liveDeals().filter((dl) => dl.productId === p.id && followedChains().includes(dl.chain)).map((dl) => ({ dl, w: dealWhen(dl) }))
+    .sort((x, y) => x.w.startsIn - y.w.startsIn);
+  const d = ds[0]; if (!d) return '';
+  return d.w.state === 'now' ? `In de aanbieding bij ${chainName(d.dl.chain)}${d.w.short ? ', ' + d.w.short : ''}` : `${d.w.short.charAt(0).toUpperCase() + d.w.short.slice(1)} in de aanbieding bij ${chainName(d.dl.chain)}`;
 }
 
 function viewLijstje(): string {
@@ -253,17 +283,18 @@ function viewLijstje(): string {
 function viewDeals(): string {
   const a = currentAddr();
   const fc = followedChains();
-  const all = D().filter((dl) => fc.includes(dl.chain) && (!ui.dealsMine || product(dl.productId)));
+  const all = liveDeals().filter((dl) => fc.includes(dl.chain) && (!ui.dealsMine || product(dl.productId)))
+    .sort((x, y) => dealWhen(x).startsIn - dealWhen(y).startsIn);
   const byChain = new Map<string, Deal[]>();
   all.forEach((dl) => byChain.set(dl.chain, (byChain.get(dl.chain) ?? []).concat(dl)));
   const groups = [...byChain.entries()].map(([chain, dls]) => ({ chain, dls, ns: nearestStore(chain, a) }))
     .sort((x, y) => (x.ns?.d ?? 99) - (y.ns?.d ?? 99));
   const upd = deals!.data.updatedAt ? new Date(deals!.data.updatedAt).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' }) : null;
-  return `<div class="section-head"><div><h1>Aanbiedingen</h1><p class="sub">${upd ? `Opgehaald op ${esc(upd)}${deals!.data.source ? ` door ${esc(deals!.data.source)}` : ''}. Controleer de prijs in de winkel.` : 'Nog niets opgehaald. De wekelijkse Claude-taak zet hier de acties neer.'}</p></div></div>
+  return `<div class="section-head"><div><h1>Aanbiedingen</h1><p class="sub">${upd ? `Opgehaald op ${esc(upd)}${deals!.data.source ? ` door ${esc(deals!.data.source)}` : ''}. Controleer de prijs in de winkel.` : 'Nog niets opgehaald. De geplande Claude-taak zet hier de acties neer.'}</p></div></div>
     <div class="filters"><button class="pill" aria-pressed="${ui.dealsMine}" data-action="deals-mine" data-v="1">Voor mijn producten</button><button class="pill" aria-pressed="${!ui.dealsMine}" data-action="deals-mine" data-v="0">Alles</button></div>
     ${groups.length ? groups.map((g) => `<section class="card" style="margin-bottom:12px"><div class="section-head"><h2>${esc(chainName(g.chain))}</h2><span class="unit">${g.ns ? (g.ns.st.online ? 'Online' : `${esc(g.ns.st.place)}, ${km(g.ns.d)}`) : 'Geen vestiging gevolgd'}</span></div>
       ${g.dls.map((dl) => { const p = product(dl.productId); const on = L().some((l) => l.dealId === dl.id && !l.done);
-        return `<div class="supply"><div style="min-width:0"><div class="name">${esc(p?.name ?? dl.title)}</div><div class="meta">${esc(dealLine(dl))}${dl.url ? ` · <a href="${esc(dl.url)}" target="_blank" rel="noopener">bron</a>` : ''}</div></div>
+        return `<div class="supply"><div style="min-width:0"><div class="name">${esc(p?.name ?? dl.title)}</div><div class="meta">${(() => { const w = dealWhen(dl); return w.state === 'soon' ? '<span class="chip soon">Binnenkort</span> ' : dl.span && SPAN_CHIP[dl.span] ? `<span class="chip warn">${SPAN_CHIP[dl.span]}</span> ` : ''; })()}${esc(dealLine(dl))}${dl.url ? ` · <a href="${esc(dl.url)}" target="_blank" rel="noopener">bron</a>` : ''}</div></div>
           <button class="btn small" data-action="deal-add" data-id="${esc(dl.id)}" ${on ? 'disabled' : ''}>${on ? 'Op de lijst' : 'Op lijstje'}</button></div>`; }).join('')}</section>`).join('')
       : '<div class="empty">Geen aanbiedingen om te tonen.</div>'}`;
 }

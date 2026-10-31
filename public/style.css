@@ -347,3 +347,6 @@ select.sel { border: 1px solid var(--line); background: var(--surface); border-r
 .st-d .in { color: var(--pine); font-weight: 600; }
 .st-row .x { border: 0; background: none; color: var(--muted); font-size: 24px; width: 40px; height: 40px; border-radius: 10px; }
 .st-row .x:hover { background: var(--surface-2); color: var(--danger); }
+.chip.soon { background: var(--pine-soft); color: var(--pine); }
+.meta.wait-tip { color: var(--pine); font-weight: 600; margin-top: 2px; }
+.supply .meta .chip { margin-right: 4px; }

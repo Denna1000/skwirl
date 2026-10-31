@@ -55,7 +55,12 @@ export interface Deal {
   price: number | null;
   normal: number | null;
   mech: string;
+  /** Eerste dag, 'YYYY-MM-DD'. Later dan vandaag = komt eraan (bijv. de folder van volgende week) */
+  from: string | null;
+  /** Laatste dag, 'YYYY-MM-DD' */
   until: string | null;
+  /** Soort actie; 'dag' en 'weekend' gelden kort */
+  span: 'week' | 'dag' | 'weekend' | null;
   url: string | null;
 }
 

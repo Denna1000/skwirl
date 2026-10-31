@@ -2,7 +2,7 @@
 
 Slim inslaan. Nooit te veel betalen.
 
-Een gedeeld boodschappenlijstje voor twee, met vaste producten, je eigen plekken en wekelijkse aanbiedingen. De app draait gratis op GitHub Pages; alle gegevens staan in een **privé** GitHub-repository. Er is geen server en geen account bij een andere dienst nodig.
+Een gedeeld boodschappenlijstje voor twee, met vaste producten, je eigen plekken en aanbiedingen (ook komende, dag- en weekendacties). De app draait gratis op GitHub Pages; alle gegevens staan in een **privé** GitHub-repository. Er is geen server en geen account bij een andere dienst nodig.
 
 - **Boodschappen**: per winkel, tegels zoals in Bring. Tik erop of eraf; houd ingedrukt voor eigenschap (bio, 500 ml) of aantal. Producten kunnen voor "elke supermarkt" of "drogist of online" gelden.
 - **Vandaag**: je lijstje, de beste winkel voor de aanbiedingen van nu, en wat bijna op is.
@@ -54,7 +54,7 @@ Deze sleutel kan alleen bij `skwirl-data`, nergens anders.
 
 ### 5. Aanbiedingen
 
-Zie [DEALS-TASK.md](DEALS-TASK.md) voor de wekelijkse Claude-taak die `deals.json` vult.
+Zie [DEALS-TASK.md](DEALS-TASK.md) voor de geplande Claude-taak die `deals.json` vult.
 
 ## Veiligheid en privacy
 
@@ -101,5 +101,5 @@ localStorage.setItem('skwirl-config', JSON.stringify({ name: 'Test', owner: 'lok
 - **Niet live**: de app ververst elke 10 seconden en als je hem opent.
 - **Elke tik is een commit** in `skwirl-data`. Dat is prima voor twee mensen, maar de geschiedenis groeit.
 - **Eén gedeelde sleutel**: alle wijzigingen staan op GitHub op naam van de eigenaar; in de app staat wie iets toevoegde.
-- **Aanbiedingen** zijn zo goed als wat de wekelijkse taak vindt. Controleer de prijs in de winkel.
+- **Aanbiedingen** zijn zo goed als wat de geplande taak vindt. Controleer de prijs in de winkel.
 - Nog niet gebouwd: kassabon scannen, bestellingen ophalen, besparingsoverzicht.
