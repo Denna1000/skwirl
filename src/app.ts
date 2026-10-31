@@ -225,13 +225,13 @@ const dealVisible = (dl: Deal): boolean => dl.chain === 'online' || followedChai
 /** Alle lopende en komende acties voor een vast product: nu eerst, dan goedkoopst */
 function productDeals(p: Product): { dl: Deal; w: ReturnType<typeof dealWhen> }[] {
   return liveDeals().filter((dl) => dl.productId === p.id && dealVisible(dl)).map((dl) => ({ dl, w: dealWhen(dl) }))
-    .sort((x, y) => Number(x.w.state === 'soon') - Number(y.w.state === 'soon') || compareValue(x.dl, y.dl) || x.w.startsIn - y.w.startsIn);
+    .sort((x, y) => Number(x.w.state === 'soon') - Number(y.w.state === 'soon') || Number(x.dl.match === 'twijfel') - Number(y.dl.match === 'twijfel') || compareValue(x.dl, y.dl) || x.w.startsIn - y.w.startsIn);
 }
 function productDealRow(p: Product, dl: Deal, w: ReturnType<typeof dealWhen>): string {
   const on = L().some((l) => l.dealId === dl.id && !l.done);
   const advice = w.state === 'soon' ? waitAdvice(p, w.startsIn) : '';
   return `<div class="pd-row"><div style="min-width:0">
-      <div class="meta"><span class="chip ${w.state === 'soon' ? 'soon' : 'ok'}">${esc(w.state === 'soon' ? w.short : 'Nu')}</span> <strong>${esc(dealShop(dl))}</strong> · ${esc([dl.mech, priceText(dl)].filter(Boolean).join(' · '))}</div>
+      <div class="meta"><span class="chip ${w.state === 'soon' ? 'soon' : 'ok'}">${esc(w.state === 'soon' ? w.short : 'Nu')}</span>${dl.match === 'twijfel' ? ' <span class="chip warn">Misschien</span>' : ''} <strong>${esc(dealShop(dl))}</strong> · ${esc([dl.mech, priceText(dl)].filter(Boolean).join(' · '))}</div>
       <div class="meta when ${w.state}">${esc(w.label)}${dl.title && dl.title !== p.name ? ` · ${esc(dl.title)}` : ''}</div>
       ${dl.note ? `<div class="meta match">${esc(dl.note)}</div>` : ''}${advice ? `<div class="meta wait-tip">${esc(advice)}</div>` : ''}</div>
     <button class="btn small" data-action="deal-add" data-id="${esc(dl.id)}" ${on ? 'disabled' : ''}>${on ? 'Op de lijst' : 'Op lijstje'}</button></div>`;
@@ -317,7 +317,7 @@ function dealRow(dl: Deal): string {
   const p = product(dl.productId); const on = L().some((l) => l.dealId === dl.id && !l.done);
   const w = dealWhen(dl);
   const chip = dl.span && SPAN_CHIP[dl.span] ? `<span class="chip warn">${SPAN_CHIP[dl.span]}</span> ` : '';
-  const mine = p ? '<span class="chip ok">Jouw product</span> ' : '';
+  const mine = p ? (dl.match === 'twijfel' ? '<span class="chip warn">Misschien jouw product</span> ' : '<span class="chip ok">Jouw product</span> ') : '';
   return `<div class="supply"><div style="min-width:0"><div class="name">${esc(p?.name ?? dl.title)}</div>
     <div class="meta">${mine}${chip}${dl.shop ? `<strong>${esc(dl.shop)}</strong> · ` : ''}${esc([dl.mech, priceText(dl), dl.normal && dl.price ? `was ${eur(dl.normal)}` : ''].filter(Boolean).join(' · '))}</div>
     <div class="meta when ${w.state}">${esc(w.label)}</div>${dl.note ? `<div class="meta match">${esc(dl.note)}</div>` : ''}</div>

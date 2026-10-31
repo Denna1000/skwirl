@@ -74,6 +74,8 @@ export interface Deal {
   shop?: string | null;
   /** Waarom deze actie bij het product past, bijv. "Stuk jong belegen, geen plakken" */
   note?: string | null;
+  /** Hoe zeker de koppeling aan het product is; bij twijfel toont de app "Misschien" */
+  match?: 'zeker' | 'twijfel' | null;
   /** Inhoud per verpakking (multipacks opgeteld), bijv. 0.5 met unit 'kg' of 3 met unit 'l' */
   amount?: number | null;
   unit?: 'kg' | 'l' | null;

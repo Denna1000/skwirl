@@ -4,6 +4,7 @@ import { esc } from './util.js';
 const cup = (c: string): string => `<path class="${c}" d="M10 18h24v12c0 6-5 10-12 10s-12-4-12-10z"/><path class="ks" d="M34 21c5 0 6 3 6 5s-2 5-6 5"/><rect class="k" x="6" y="40" width="32" height="3" rx="1.5"/><path class="ks" d="M17 13c-2-3 2-4 0-7M25 13c-2-3 2-4 0-7"/>`;
 const ART: Record<string, string> = {
   seeds: '<g transform="rotate(-20 24 24)"><ellipse class="k" cx="16" cy="19" rx="4.2" ry="6.5"/><ellipse class="c" cx="28" cy="16" rx="4.2" ry="6.5"/><ellipse class="a" cx="22" cy="31" rx="4.2" ry="6.5"/><ellipse class="k" cx="34" cy="29" rx="3.6" ry="5.6"/><ellipse class="c" cx="11" cy="33" rx="3.6" ry="5.6"/></g>',
+  mango: '<path class="y" d="M13 31c0-11 8-19 19-19 5 0 8 3 8 8 0 11-10 21-20 21-5 0-7-4-7-10z"/><path class="a" d="M21 40c-5-1-8-4-8-9 0-5 3-9 6-12-1 7 0 14 2 21z"/><path class="g" d="M31 12c1-4 6-7 10-5-2 4-6 6-10 5z"/>',
   apple: '<path class="a" d="M24 15c-3-3-9-3-12 1-4 5-2 15 3 20 3 3 6 3 9 1 3 2 6 2 9-1 5-5 7-15 3-20-3-4-9-4-12-1z"/><path class="ks" d="M24 15c0-4 1-7 4-9"/><path class="g" d="M27 10c3-4 8-4 10-2-2 4-7 5-10 2z"/>',
   pear: '<path class="g" d="M24 12c-4 0-5 4-5 8 0 3-6 6-6 13 0 6 5 9 11 9s11-3 11-9c0-7-6-10-6-13 0-4-1-8-5-8z"/><path class="ks" d="M24 12c0-3 1-5 3-6"/>',
   banana: '<path class="y" d="M9 12c1 15 12 26 29 24 3-.4 3.5-3.5.5-4C25 31 17 23 15 12c-.6-3-6.3-3.5-6 0z"/><path class="k" d="M8.5 12.5 7 8.5l4-1.5 2 4z"/>',
@@ -56,7 +57,7 @@ const ART: Record<string, string> = {
 const ART_RULES: [RegExp, string][] = [
   [/zaad|zaden|chia|sesam|pitten|quinoa/, 'seeds'], [/pindakaas|jam\b|hagel|pindasaus|pesto|honing|choco.*pasta|nutella|appelstroop/, 'jar'],
   [/pinda|noot|noten|amandel|cashew/, 'acorn'], [/filter|brita/, 'drop'], [/sap\b|sap$|frisdrank|cola|limonade|spa\b/, 'bottle'],
-  [/peer|peren/, 'pear'], [/jonagold|elstar|appel/, 'apple'], [/banaan|bananen/, 'banana'], [/citroen|limoen/, 'lemon'],
+  [/mango/, 'mango'], [/peer|peren/, 'pear'], [/jonagold|elstar|appel/, 'apple'], [/banaan|bananen/, 'banana'], [/citroen|limoen/, 'lemon'],
   [/mandarijn|sinaas|clementine|grapefruit/, 'citrus'], [/druif|druiven/, 'grapes'], [/aardbei|framboos|frambozen|bessen/, 'berry'],
   [/tomaat|tomaten/, 'tomato'], [/komkommer|courgette/, 'cucumber'], [/wortel|peen/, 'carrot'], [/aardappel|krieler/, 'potato'],
   [/^uien?\b|\bui$|sjalot|knoflook/, 'onion'], [/paprika|peper/, 'pepper'], [/broccoli|bloemkool/, 'broccoli'],
