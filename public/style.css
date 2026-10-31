@@ -342,3 +342,8 @@ select.sel { border: 1px solid var(--line); background: var(--surface); border-r
 .supply > .btn { align-self: center; }
 .addr > .btn.ghost { grid-column: 1 / -1; justify-self: start; }
 .sheet input[type=radio], .sheet input[type=checkbox] { width: auto; padding: 0; flex: none; }
+.unfollowed { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+.unfollowed summary { cursor: pointer; font-weight: 600; color: var(--muted); padding: 4px 0; }
+.st-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.st-d { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.st-d .in { color: var(--pine); font-weight: 600; }

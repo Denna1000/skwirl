@@ -57,6 +57,7 @@ let sheet: null | { type: 'item'; id: string } | { type: 'product'; id: string |
 let draft = '';
 let placeResults: Place[] = [];
 let pollTimer: number | undefined;
+let showUnfollowed = false;
 
 const H = (): Household => house!.data;
 const L = (): ListItem[] => list!.data.items;
@@ -67,11 +68,17 @@ const $ = <E extends HTMLElement = HTMLElement>(sel: string): E => document.quer
 
 const chainName = (c: string): string => H().chains[c]?.name ?? c;
 const kindOf = (c: string): Kind => H().chains[c]?.kind ?? 'overig';
-const multiChain = (k: Kind): boolean => Object.values(H().chains).filter((x) => x.kind === k).length > 1;
+/** Ketens waarvan je minstens één winkel volgt; alleen die verschijnen in lijst, Vandaag en Deals */
+function followedChains(): string[] {
+  const followed = new Set(H().stores.filter((s) => s.follow).map((s) => s.chain));
+  const keys = Object.keys(H().chains).filter((c) => followed.has(c));
+  return keys.length ? keys : Object.keys(H().chains); // niets gevolgd: toon alles, anders is er geen lijst
+}
+const multiChain = (k: Kind): boolean => followedChains().filter((c) => kindOf(c) === k).length > 1;
 const anyLabel = (kinds: Kind[]): string => { const t = kinds.map((k) => KIND_ANY[k]).join(' of '); return t.charAt(0).toUpperCase() + t.slice(1); };
 const onListFor = (l: ListItem, c: string): boolean => (l.kinds ? l.kinds.includes(kindOf(c)) : l.chain === c);
 const currentAddr = (): Address | null => H().addresses.find((a) => a.id === ui.addr) ?? H().addresses[0] ?? null;
-const currentChain = (): string => (ui.listChain in H().chains ? ui.listChain : Object.keys(H().chains)[0]);
+const currentChain = (): string => { const fc = followedChains(); return fc.includes(ui.listChain) ? ui.listChain : fc[0]; };
 const product = (id: string | null): Product | undefined => (id ? H().products.find((p) => p.id === id) : undefined);
 
 function daysLeft(p: Product): number | null {
@@ -197,7 +204,7 @@ function viewVandaag(): string {
   const lc = currentChain();
   const dateStr = new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
   const listCard = `<section class="card list-card"><div class="section-head" style="margin-bottom:0"><h2>Boodschappenlijstje</h2>
-      <label class="mini-pick"><span class="sr-only">Winkel</span><select data-action="li-chain-sel">${Object.keys(H().chains).map((c) => `<option value="${esc(c)}" ${c === lc ? 'selected' : ''}>${esc(chainName(c))}</option>`).join('')}</select></label></div>
+      <label class="mini-pick"><span class="sr-only">Winkel</span><select data-action="li-chain-sel">${followedChains().map((c) => `<option value="${esc(c)}" ${c === lc ? 'selected' : ''}>${esc(chainName(c))}</option>`).join('')}</select></label></div>
       ${listPanel(lc, true)}</section>`;
 
   const ranked = relevantDeals(a);
@@ -235,7 +242,7 @@ function viewLijstje(): string {
   const a = currentAddr();
   const chain = currentChain();
   const open = (c: string): number => L().filter((l) => onListFor(l, c) && !l.done).length;
-  const chains = Object.keys(H().chains).sort((x, y) => Number(open(y) > 0) - Number(open(x) > 0));
+  const chains = followedChains().sort((x, y) => Number(open(y) > 0) - Number(open(x) > 0));
   const picker = chains.map((c) => `<button aria-pressed="${c === chain}" data-action="li-chain" data-v="${esc(c)}">${esc(chainName(c))}${open(c) ? `<span class="n">${open(c)}</span>` : ''}</button>`).join('');
   const ns = nearestStore(chain, a);
   const where = ns ? (ns.st.online ? 'Online bestellen' : `${ns.st.place}, ${km(ns.d)}${a ? ` vanaf ${a.name.toLowerCase()}` : ''}`) : '';
@@ -246,7 +253,8 @@ function viewLijstje(): string {
 
 function viewDeals(): string {
   const a = currentAddr();
-  const all = D().filter((dl) => !ui.dealsMine || product(dl.productId));
+  const fc = followedChains();
+  const all = D().filter((dl) => fc.includes(dl.chain) && (!ui.dealsMine || product(dl.productId)));
   const byChain = new Map<string, Deal[]>();
   all.forEach((dl) => byChain.set(dl.chain, (byChain.get(dl.chain) ?? []).concat(dl)));
   const groups = [...byChain.entries()].map(([chain, dls]) => ({ chain, dls, ns: nearestStore(chain, a) }))
@@ -281,16 +289,19 @@ function viewPlekken(): string {
     <div style="grid-column:1/-1"><label for="r-${esc(a.id)}" class="unit">Winkels tot <strong class="num" id="rv-${esc(a.id)}">${a.radius} km</strong></label>
     <input type="range" id="r-${esc(a.id)}" min="0.5" max="20" step="0.5" value="${a.radius}" data-action="radius" data-v="${esc(a.id)}"></div>
     <button class="btn small ghost" data-action="addr-del" data-v="${esc(a.id)}">Verwijderen</button></div>`).join('');
-  const phys = H().stores.filter((s) => !s.online);
-  const head = `<div class="store-row head" style="grid-template-columns:minmax(0,1fr) ${H().addresses.map(() => '64px').join(' ')} 48px"><span>Winkel</span>${H().addresses.map((a) => `<span class="d">${esc(a.name)}</span>`).join('')}<span>Volg</span></div>`;
-  const row = (st: Store): string => `<div class="store-row" style="grid-template-columns:minmax(0,1fr) ${H().addresses.map(() => '64px').join(' ')} 48px">
-    <div style="min-width:0"><strong>${esc(st.name)}</strong> <span class="unit">${esc(st.place)}</span></div>
-    ${H().addresses.map((a) => { const d = st.online ? 0 : distanceKm(a, st); return `<span class="d num ${st.online || d <= a.radius ? 'in' : ''}">${st.online ? '—' : d < 30 ? km(d) : '—'}</span>`; }).join('')}
-    <span class="switch"><input type="checkbox" ${st.follow ? 'checked' : ''} data-action="follow" data-v="${esc(st.id)}" aria-label="Volg ${esc(st.name)} ${esc(st.place)}"></span></div>`;
+  const followed = H().stores.filter((s) => s.follow).sort((x, y) => Number(!!x.online) - Number(!!y.online));
+  const unfollowed = H().stores.filter((s) => !s.follow);
+  const row = (st: Store): string => {
+    const dists = st.online ? 'Online' : H().addresses.map((a) => { const d = distanceKm(a, st); return `<span class="${d <= a.radius ? 'in' : ''}">${esc(a.name)} ${d < 30 ? km(d) : '—'}</span>`; }).join(' · ');
+    return `<div class="st-row"><div style="min-width:0"><strong>${esc(st.name)}</strong> <span class="unit">${esc(st.place)}</span><div class="st-d num">${dists}</div></div>
+      <span class="switch"><input type="checkbox" ${st.follow ? 'checked' : ''} data-action="follow" data-v="${esc(st.id)}" aria-label="Volg ${esc(st.name)} ${esc(st.place)}"></span></div>`;
+  };
   return `<div class="section-head"><div><h1>Plekken &amp; winkels</h1><p class="sub">Vanaf deze adressen zoekt Skwirl de beste winkel.</p></div><button class="btn" data-action="addr-new">Adres toevoegen</button></div>
     <div class="deal-grid">${addrs || '<div class="empty">Nog geen adressen.</div>'}</div>
-    <section class="card" style="margin-top:16px"><div class="section-head"><h2>Winkels die je volgt</h2><button class="btn small" data-action="store-new">Winkel toevoegen</button></div>
-      <div class="table-scroll"><div>${head}${phys.map(row).join('')}${H().stores.filter((s) => s.online).map(row).join('')}</div></div></section>
+    <section class="card" style="margin-top:16px"><div class="section-head"><div><h2>Winkels die je volgt</h2><span class="unit">Groen = binnen je straal</span></div><button class="btn small" data-action="store-new">Winkel toevoegen</button></div>
+      ${followed.map(row).join('') || '<div class="empty">Je volgt nog geen winkels.</div>'}
+      ${unfollowed.length ? `<details class="unfollowed" ${showUnfollowed ? 'open' : ''}><summary>Niet gevolgd (${unfollowed.length})</summary><p class="hint">Deze winkels zie je nergens in de app. Zet ze aan om ze weer te volgen.</p>
+        ${unfollowed.map(row).join('')}</details>` : ''}</section>
     <section class="card" style="margin-top:16px"><h2>Samen gebruiken</h2>
       <p class="sub">Verbonden met <strong>${esc(cfg!.owner)}/${esc(cfg!.repo)}</strong> als <strong>${esc(cfg!.name)}</strong>.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn" data-action="share">Telefoon koppelen</button><button class="btn ghost" data-action="disconnect">Ontkoppelen op dit apparaat</button></div></section>`;
@@ -565,6 +576,9 @@ document.addEventListener('input', (e) => {
   if (el.dataset.action === 'radius') { const lab = document.getElementById('rv-' + el.dataset.v); if (lab) lab.textContent = el.value + ' km'; }
   if (el.id === 'li-new') draft = el.value;
 });
+
+// open/dicht van "Niet gevolgd" onthouden, ook als het scherm opnieuw wordt opgebouwd
+document.addEventListener('toggle', (e) => { const d = e.target as HTMLDetailsElement; if (d.classList?.contains('unfollowed')) showUnfollowed = d.open; }, true);
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && sheet) { sheet = null; render(); }
