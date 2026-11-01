@@ -372,3 +372,5 @@ select.sel { border: 1px solid var(--line); background: var(--surface); border-r
 .card.pd { padding-top: 14px; }
 .card.pd .pd-row { padding-left: 0; }
 .tile .sp.var { color: var(--pine); font-weight: 700; }
+.group-h { font-size: 18px; margin: 10px 0 0; }
+.group-sub { margin: -4px 0 0; font-size: 13.5px; }

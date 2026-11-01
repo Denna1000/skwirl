@@ -25,7 +25,7 @@ const MAX_RECENT = 40;
 
 const DEFAULT_CHAINS: Household['chains'] = {
   ah: { name: 'Albert Heijn', kind: 'super' }, jumbo: { name: 'Jumbo', kind: 'super' }, lidl: { name: 'Lidl', kind: 'super' },
-  vomar: { name: 'Vomar', kind: 'super' }, aldi: { name: 'Aldi', kind: 'super' }, dekamarkt: { name: 'DekaMarkt', kind: 'super' },
+  vomar: { name: 'Vomar', kind: 'super' }, ekoplaza: { name: 'Ekoplaza', kind: 'super' }, aldi: { name: 'Aldi', kind: 'super' }, dekamarkt: { name: 'DekaMarkt', kind: 'super' },
   kruidvat: { name: 'Kruidvat', kind: 'drogist' }, etos: { name: 'Etos', kind: 'drogist' },
   gamma: { name: 'Gamma', kind: 'bouw' }, praxis: { name: 'Praxis', kind: 'bouw' }, pets: { name: 'Pets Place', kind: 'dier' },
   bol: { name: 'bol.com', kind: 'online' },
@@ -33,7 +33,7 @@ const DEFAULT_CHAINS: Household['chains'] = {
 // Vaste actiepagina's als de geplande taak (nog) geen folderlink heeft gevonden
 const FOLDER_PAGES: Record<string, string> = {
   ah: 'https://www.ah.nl/bonus/folder', jumbo: 'https://www.jumbo.com/aanbiedingen', lidl: 'https://www.lidl.nl/c/aanbiedingen/a10008785',
-  vomar: 'https://www.vomar.nl/aanbiedingen', kruidvat: 'https://www.kruidvat.nl/acties', etos: 'https://www.etos.nl/acties/',
+  vomar: 'https://www.vomar.nl/aanbiedingen', ekoplaza: 'https://www.ekoplaza.nl/nl/aanbiedingen', kruidvat: 'https://www.kruidvat.nl/acties', etos: 'https://www.etos.nl/acties/',
   gamma: 'https://www.gamma.nl/folder', pets: 'https://www.petsplace.nl/acties', bol: 'https://www.bol.com/nl/nl/sf/aanbiedingen/',
 };
 const KIND_ANY: Record<Kind, string> = { super: 'elke supermarkt', drogist: 'elke drogist', online: 'online', bouw: 'elke bouwmarkt', dier: 'elke dierenwinkel', slager: 'elke slager', overig: 'overal' };
@@ -271,14 +271,18 @@ function searching(p?: Product): boolean {
 function viewVandaag(): string {
   const dateStr = new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
   const all = H().products.map((p) => ({ p, ds: productDeals(p) }));
-  const onSale = all.filter((x) => x.ds.length)
-    .sort((x, y) => Number(x.ds[0].w.state === 'soon') - Number(y.ds[0].w.state === 'soon') || x.p.name.localeCompare(y.p.name));
+  const nowList = all.map(({ p, ds }) => ({ p, ds: ds.filter((d) => d.w.state === 'now') })).filter((x) => x.ds.length).sort((x, y) => x.p.name.localeCompare(y.p.name));
+  // komende acties, bijv. uit de folder van volgende week; eerstvolgende eerst
+  const soonList = all.map(({ p, ds }) => ({ p, ds: ds.filter((d) => d.w.state === 'soon') })).filter((x) => x.ds.length)
+    .sort((x, y) => x.ds[0].w.startsIn - y.ds[0].w.startsIn || x.p.name.localeCompare(y.p.name));
   const none = all.filter((x) => !x.ds.length).map((x) => x.p);
   const upd = deals!.data.updatedAt ? new Date(deals!.data.updatedAt).toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : null;
   const status = searching() ? 'Skwirl zoekt nu naar acties…' : upd ? `Laatst gezocht: ${upd}` : 'Nog niet gezocht';
-  const cards = onSale.map(({ p, ds }) => `<section class="card pd">
+  const card = ({ p, ds }: { p: Product; ds: ReturnType<typeof productDeals> }): string => `<section class="card pd">
       <div class="pd-name">${iconFor(p.name)}<span>${esc(p.name)}</span>${searching(p) ? '<span class="chip soon">Wordt gezocht…</span>' : ''}</div>
-      ${ds.map(({ dl, w }) => productDealRow(p, dl, w)).join('')}</section>`).join('');
+      ${ds.map(({ dl, w }) => productDealRow(p, dl, w)).join('')}</section>`;
+  const cards = (nowList.length ? `<h2 class="group-h">Nu in de aanbieding</h2>${nowList.map(card).join('')}` : '')
+    + (soonList.length ? `<h2 class="group-h">Binnenkort in de aanbieding</h2><p class="sub group-sub">Uit de folder van volgende week of acties die later beginnen.</p>${soonList.map(card).join('')}` : '');
   const rest = none.length ? `<section class="card"><h3>Nu geen actie</h3><div class="none-list">${none.map((p) => `<span class="chip">${esc(p.name)}${searching(p) ? ' · zoeken…' : ''}</span>`).join('')}</div></section>` : '';
   return `<div class="section-head"><div><div class="eyebrow">${esc(dateStr)}</div><h1>In de aanbieding</h1><p class="sub">${esc(status)}</p></div>
       <button class="btn" data-action="scan-all" ${searching() ? 'disabled' : ''}>Nu zoeken</button></div>
@@ -425,7 +429,7 @@ function sheetHtml(): string {
   if (sheet.type === 'address' || sheet.type === 'store') {
     const isStore = sheet.type === 'store';
     return wrap(isStore ? 'Winkel toevoegen' : 'Adres toevoegen', `<form id="${isStore ? 'store-form' : 'addr-form'}" class="sheet-form">
-      ${isStore ? `<label>Keten<select name="chain">${Object.keys(H().chains).map((c) => `<option value="${esc(c)}">${esc(chainName(c))}</option>`).join('')}<option value="__new">Andere winkel…</option></select></label>
+      ${isStore ? `<label>Keten<select name="chain">${Object.entries({ ...DEFAULT_CHAINS, ...H().chains }).sort((x, y) => x[1].name.localeCompare(y[1].name)).map(([c, v]) => `<option value="${esc(c)}">${esc(v.name)}</option>`).join('')}<option value="__new">Andere winkel…</option></select></label>
         <div class="two"><label>Naam (bij andere winkel)<input name="newName" maxlength="40" placeholder="Bijv. Slagerij Jansen"></label>
         <label>Soort<select name="newKind">${(Object.keys(KIND_NAME) as Kind[]).map((k) => `<option value="${k}">${esc(KIND_NAME[k])}</option>`).join('')}</select></label></div>`
         : '<label>Naam<input name="name" required maxlength="30" placeholder="Bijv. Thuis, Werk, Ouders"></label>'}
@@ -718,7 +722,8 @@ document.addEventListener('submit', (e) => {
       if (!ui.addr) ui.addr = a.id;
     } else {
       let chain = get('chain'); const newName = get('newName');
-      const newChain = chain === '__new' ? { id: newName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || uid('c'), name: newName || 'Winkel', kind: get('newKind') as Kind } : null;
+      const known = chain !== '__new' && !H().chains[chain] && DEFAULT_CHAINS[chain] ? { id: chain, ...DEFAULT_CHAINS[chain] } : null;
+      const newChain = chain === '__new' ? { id: newName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || uid('c'), name: newName || 'Winkel', kind: get('newKind') as Kind } : known;
       if (newChain) chain = newChain.id;
       const st: Store = { id: uid('s'), chain, name: newChain ? newChain.name : chainName(chain), place: pl.place, type: KIND_NAME[newChain ? newChain.kind : kindOf(chain)], lat: +pl.lat.toFixed(5), lon: +pl.lon.toFixed(5), follow: true };
       house.mutate((h) => { if (newChain && !h.chains[newChain.id]) h.chains[newChain.id] = { name: newChain.name, kind: newChain.kind }; if (!h.stores.some((x) => x.id === st.id)) h.stores.push(st); }, `Winkel: ${st.name} ${st.place}`).catch(() => {});
