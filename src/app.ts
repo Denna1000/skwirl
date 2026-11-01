@@ -762,4 +762,12 @@ else showSetup();
 
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void pullAll(); });
 window.addEventListener('online', () => { void pullAll(); });
-if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+// Nieuwe versie van de app: de service worker neemt het over en de pagina laadt zichzelf opnieuw
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) location.reload(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') navigator.serviceWorker.getRegistration().then((r) => r?.update()).catch(() => {});
+  });
+}
