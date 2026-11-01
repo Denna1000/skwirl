@@ -222,7 +222,7 @@ function priceText(dl: Deal): string {
 }
 /** Een actie telt mee als je een winkel van die keten volgt, of als het een online actie is */
 const dealVisible = (dl: Deal): boolean => dl.chain === 'online' || followedChains().includes(dl.chain);
-/* Wat je over een actie zei ("Klopt" / "Past niet"), per product op titel */
+/* Wat je over een actie zei ("Bedoel ik" / "Bedoel ik niet"), per product op titel */
 const titleKey = (t: string): string => t.toLowerCase().replace(/\s+/g, ' ').trim();
 function feedback(p: Product, dl: Deal): 'yes' | 'no' | null {
   const k = titleKey(dl.title);
@@ -234,7 +234,7 @@ function feedback(p: Product, dl: Deal): 'yes' | 'no' | null {
 const doubtful = (p: Product, dl: Deal): boolean => dl.match === 'twijfel' && feedback(p, dl) !== 'yes';
 /** De actie hoort echt bij het product (niet afgewezen) */
 const linked = (dl: Deal): Product | undefined => { const p = product(dl.productId); return p && feedback(p, dl) !== 'no' ? p : undefined; };
-const fbButtons = (dl: Deal): string => `<div class="fb"><span>Past dit?</span><button class="btn small" data-action="deal-fb" data-id="${esc(dl.id)}" data-v="yes">Klopt</button><button class="btn small ghost" data-action="deal-fb" data-id="${esc(dl.id)}" data-v="no">Past niet</button></div>`;
+const fbButtons = (dl: Deal): string => `<div class="fb"><span>Is dit wat je zoekt?</span><button class="btn small" data-action="deal-fb" data-id="${esc(dl.id)}" data-v="yes">Bedoel ik</button><button class="btn small ghost" data-action="deal-fb" data-id="${esc(dl.id)}" data-v="no">Bedoel ik niet</button></div>`;
 
 /** Alle lopende en komende acties voor een vast product: nu eerst, zeker voor twijfel, dan goedkoopst */
 function productDeals(p: Product): { dl: Deal; w: ReturnType<typeof dealWhen> }[] {
@@ -650,8 +650,8 @@ document.addEventListener('click', (e) => {
         x.likes = (x.likes ?? []).filter((t) => titleKey(t) !== k); x.dislikes = (x.dislikes ?? []).filter((t) => titleKey(t) !== k);
         (yes ? x.likes : x.dislikes).push(title);
         x.likes = x.likes.slice(-30); x.dislikes = x.dislikes.slice(-30);
-      }, `Feedback ${p.name}: ${yes ? 'klopt' : 'past niet'}`).catch(() => {});
-      toast(yes ? `Onthouden: dit soort hoort bij ${p.name}` : `Onthouden: dit past niet bij ${p.name}. Skwirl laat het voortaan weg.`);
+      }, `Feedback ${p.name}: ${yes ? 'bedoel ik' : 'bedoel ik niet'}`).catch(() => {});
+      toast(yes ? `Onthouden: dit bedoel je met ${p.name}` : `Onthouden: dit bedoel je niet met ${p.name}. Skwirl laat het voortaan weg.`);
       break;
     }
     case 'fb-forget': {
