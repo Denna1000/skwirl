@@ -168,17 +168,21 @@ function listPanel(chain: string, compact: boolean): string {
   const recent = items.filter((l) => l.done).sort((x, y) => (y.doneAt ?? 0) - (x.doneAt ?? 0));
   const known = new Set(items.map((l) => l.name.toLowerCase()));
   const k = kindOf(chain);
-  // je vaste producten die hier te koop zijn, in jouw woorden ("Volle yoghurt", "Kipfilet broodbeleg")
-  const mine = H().products.filter((p) => !known.has(p.name.toLowerCase()) && (!p.where.length || p.where.includes(k)));
+  // al je vaste producten, in jouw woorden ("Volle yoghurt", "Kipfilet broodbeleg"); wat hier te koop is eerst
+  const onListNow = new Set(todo.map((l) => l.name.toLowerCase()));
+  const mine = H().products.filter((p) => !onListNow.has(p.name.toLowerCase()))
+    .sort((x, y) => Number(!!x.where.length && !x.where.includes(k)) - Number(!!y.where.length && !y.where.includes(k)) || x.name.localeCompare(y.name));
+  const productNames = new Set(H().products.map((p) => p.name.toLowerCase()));
   // algemene suggesties alleen als geen vast product dat al dekt ("Yoghurt" niet als je "Volle yoghurt" hebt)
   const covered = (q: string): boolean => H().products.some((p) => p.name.toLowerCase().includes(q.toLowerCase().replace(/s$|en$/, '')));
   const catalog = QUICK.filter((q) => !known.has(q.toLowerCase()) && !covered(q));
   const maxTodo = compact ? 6 : 999, maxSug = compact ? 6 : 18;
   const prodTile = (p: Product): string => `<button class="tile sug" data-action="li-prod" data-id="${esc(p.id)}" aria-label="${esc(p.name)} op de lijst zetten">${iconFor(p.name)}<span class="nm">${esc(p.name)}</span>${p.wants ? `<span class="sp">${esc(p.wants)}</span>` : ''}</button>`;
-  const sugTiles = recent.slice(0, maxSug).map(tile)
-    .concat(mine.map(prodTile))
+  // vaste producten altijd allemaal; daarna onlangs gekocht en algemene suggesties tot het maximum
+  const extra = recent.filter((l) => !productNames.has(l.name.toLowerCase())).map(tile)
     .concat(catalog.map((q) => `<button class="tile sug" data-action="li-quick" data-v="${esc(q)}" aria-label="${esc(q)} op de lijst zetten">${iconFor(q)}<span class="nm">${esc(q)}</span></button>`))
-    .slice(0, maxSug);
+    .slice(0, Math.max(0, maxSug - mine.length));
+  const sugTiles = mine.map(prodTile).concat(extra);
   return `
     <form class="add-row" id="li-form" autocomplete="off">
       <label for="li-new" class="sr-only">Product toevoegen</label>
@@ -579,7 +583,8 @@ document.addEventListener('click', (e) => {
   switch (act) {
     case 'li-out': { const it = L().find((x) => x.id === id); if (!it) return; el.classList.add('pop'); setTimeout(() => takeOff(it), 140); break; }
     case 'li-in': el.classList.add('pop'); setTimeout(() => setItem(id, { done: false, doneAt: null, createdAt: Date.now() }, `+ ${L().find((x) => x.id === id)?.name ?? ''}`), 140); break;
-    case 'li-prod': { const p = product(id); if (p) { el.classList.add('pop'); addItem({ name: p.name, productId: p.id }); } break; }
+    case 'li-prod': { const p = product(id); if (!p) return; el.classList.add('pop'); addItem({ name: p.name, productId: p.id });
+      const k = kindOf(currentChain()); if (p.where.length && !p.where.includes(k)) toast(`${p.name} staat op je lijst voor ${anyLabel(p.where).toLowerCase()}`); break; }
     case 'scan-all': { const now = Date.now(); house.mutate((h) => { h.scanAllAt = now; }, 'Zoek alle producten nu').catch(() => {}); toast('Skwirl zoekt nu alle acties. Dat duurt 5 à 10 minuten.'); break; }
     case 'prod-scan': { const p = product(id); if (!p) return; const now = Date.now();
       house.mutate((h) => { const x = h.products.find((q) => q.id === p.id); if (x) x.scanAt = now; }, `Zoek product: ${p.name}`).catch(() => {});
