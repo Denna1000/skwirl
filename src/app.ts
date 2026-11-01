@@ -345,9 +345,9 @@ function viewProducten(): string {
       ${p.wants || p.avoid ? `<div class="unit prefs">${p.wants ? `<span>Wel: ${esc(p.wants)}</span>` : ''}${p.avoid ? `<span>Niet: ${esc(p.avoid)}</span>` : ''}</div>` : ''}
       ${p.loose || searching(p) ? `<div class="where-tag">${p.loose ? '<span class="chip">Los, zonder barcode</span>' : ''}${searching(p) ? '<span class="chip soon">Wordt gezocht…</span>' : ''}</div>` : ''}
       ${productDeals(p).slice(0, 2).map(({ dl, w }) => productDealRow(p, dl, w)).join('')}</div>
-      <div class="prod-actions"><button class="btn small" data-action="prod-list" data-id="${esc(p.id)}">Op de lijst</button><button class="btn small ghost" data-action="prod-scan" data-id="${esc(p.id)}" ${searching(p) ? 'disabled' : ''}>Zoek nu</button><button class="btn small ghost" data-action="prod-edit" data-id="${esc(p.id)}">Bewerken</button></div></div>`;
+      <div class="prod-actions">${p.where.includes('online') ? `<button class="btn small ghost" data-action="prod-scan" data-id="${esc(p.id)}" ${searching(p) ? 'disabled' : ''}>Zoek nu online</button>` : ''}<button class="btn small ghost" data-action="prod-edit" data-id="${esc(p.id)}">Bewerken</button></div></div>`;
   }).join('');
-  return `<div class="section-head"><div><h1>Vaste producten</h1><p class="sub">Wat je steeds opnieuw koopt. Skwirl zoekt ma, do en za de acties die passen bij wat je wilt, of direct met "Zoek nu".</p></div>
+  return `<div class="section-head"><div><h1>Vaste producten</h1><p class="sub">Wat je steeds opnieuw koopt. Skwirl zoekt ma, do en za de acties die passen bij wat je wilt. Online producten kun je ook direct laten zoeken.</p></div>
     <button class="btn primary" data-action="prod-new">Product toevoegen</button></div>
     <section class="card">${rows || '<div class="empty">Nog geen vaste producten. Voeg toe wat je steeds opnieuw koopt.</div>'}</section>`;
 }
@@ -583,7 +583,7 @@ document.addEventListener('click', (e) => {
     case 'scan-all': { const now = Date.now(); house.mutate((h) => { h.scanAllAt = now; }, 'Zoek alle producten nu').catch(() => {}); toast('Skwirl zoekt nu alle acties. Dat duurt 5 à 10 minuten.'); break; }
     case 'prod-scan': { const p = product(id); if (!p) return; const now = Date.now();
       house.mutate((h) => { const x = h.products.find((q) => q.id === p.id); if (x) x.scanAt = now; }, `Zoek product: ${p.name}`).catch(() => {});
-      toast(`Skwirl zoekt acties voor ${p.name}. Dat duurt een paar minuten.`); break; }
+      toast(`Skwirl zoekt online naar acties voor ${p.name}. Dat duurt een paar minuten.`); break; }
     case 'li-quick': el.classList.add('pop'); addItem({ name: v }); break;
     case 'li-chain': ui.listChain = v; render(); break;
     case 'li-scope': ui.addAny = v === '1'; render(); break;
@@ -599,7 +599,6 @@ document.addEventListener('click', (e) => {
       const next = cur.includes(v) ? cur.filter((x) => x !== v) : cur.concat(v);
       inp?.blur(); setItem(l.id, { spec: next.join(' · ') || null }, `${l.name}: ${next.join(', ') || 'geen eigenschap'}`); break;
     }
-    case 'prod-list': { const p = product(id); if (p) { addItem({ name: p.name, productId: p.id }); toast(`${p.name} staat op je lijst`); } break; }
     case 'prod-new': sheet = { type: 'product', id: null }; render(); break;
     case 'prod-edit': sheet = { type: 'product', id }; render(); break;
     case 'prod-del': if (sheet?.type === 'product' && sheet.id) { const pid = sheet.id; const name = product(pid)?.name; sheet = null;
