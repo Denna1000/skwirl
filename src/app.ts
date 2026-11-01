@@ -17,6 +17,7 @@ interface Config extends Connection { name: string }
 interface Ui { tab: Tab; addr: string | null; listChain: string; addAny: boolean; dealsMine: boolean }
 type Tab = 'vandaag' | 'lijstje' | 'deals' | 'producten' | 'plekken';
 
+const APP_VERSION = '__VERSION__'; // wordt bij het bouwen ingevuld
 const CFG_KEY = 'skwirl-config';
 const CACHE_KEY = 'skwirl-cache';
 const UI_KEY = 'skwirl-ui';
@@ -383,7 +384,8 @@ function viewPlekken(): string {
 </section>
     <section class="card" style="margin-top:16px"><h2>Samen gebruiken</h2>
       <p class="sub">Verbonden met <strong>${esc(cfg!.owner)}/${esc(cfg!.repo)}</strong> als <strong>${esc(cfg!.name)}</strong>.</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn" data-action="share">Telefoon koppelen</button><button class="btn ghost" data-action="disconnect">Ontkoppelen op dit apparaat</button></div></section>`;
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn" data-action="share">Telefoon koppelen</button><button class="btn ghost" data-action="disconnect">Ontkoppelen op dit apparaat</button></div>
+      <p class="hint">Versie ${esc(APP_VERSION.slice(0, 7))}</p></section>`;
 }
 
 /* ---------- Panelen (onderin) ---------- */

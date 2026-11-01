@@ -12,7 +12,8 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return; // GitHub, PDOK en fonts niet cachen
   // eerst netwerk, zodat een nieuwe versie direct zichtbaar is; zonder netwerk uit de cache
-  e.respondWith(fetch(e.request).then((res) => {
+  // no-cache: altijd even bij de server navragen, anders blijft GitHub Pages tot 10 minuten een oude versie geven
+  e.respondWith(fetch(e.request, { cache: 'no-cache' }).then((res) => {
     const copy = res.clone();
     caches.open(CACHE).then((c) => c.put(e.request, copy));
     return res;

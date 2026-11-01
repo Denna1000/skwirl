@@ -13,4 +13,6 @@ const hash = createHash('sha256');
 for (const f of files) hash.update(readFileSync(`dist/${f}`));
 const sw = readFileSync('dist/sw.js', 'utf8').replace('__VERSION__', hash.digest('hex').slice(0, 10));
 writeFileSync('dist/sw.js', sw);
+const version = sw.match(/skwirl-([0-9a-f]+)/)[1];
+writeFileSync('dist/js/app.js', readFileSync('dist/js/app.js', 'utf8').replace('__VERSION__', version));
 console.log('Klaar: dist/');
