@@ -42,6 +42,8 @@ export interface Product {
   wants?: string | null;
   /** Wat juist niet, bijv. "plakken" of "vleeswaren voor op brood" */
   avoid?: string | null;
+  /** Andere varianten die je soms koopt, bijv. ["biologisch"] bij Bananen; elk krijgt een eigen tegel en wordt apart gezocht */
+  variants?: string[];
   /** Titels van acties waarvan je zei "Klopt" of "Past niet"; de scan leert hiervan */
   likes?: string[];
   dislikes?: string[];

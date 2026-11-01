@@ -121,7 +121,7 @@ function addItem(fields: Partial<ListItem> & { name: string }, chain = currentCh
   const p = fields.productId ? product(fields.productId) : matchProduct(fields.name);
   if (p && !fields.productId && !fields.dealId) fields = { ...fields, name: p.name };
   // staat het al bij "Onlangs", zet dat dan terug in plaats van een dubbele tegel
-  const again = L().find((l) => l.done && l.name.toLowerCase() === fields.name.toLowerCase() && onListFor(l, chain));
+  const again = L().find((l) => l.done && l.name.toLowerCase() === fields.name.toLowerCase() && (l.spec ?? '') === (fields.spec ?? '') && onListFor(l, chain));
   if (again && !fields.dealId) {
     const patch = { done: false, doneAt: null, createdAt: Date.now(), ...(fields.spec ? { spec: fields.spec } : {}), ...(fields.qty && fields.qty > 1 ? { qty: fields.qty } : {}) };
     setItem(again.id, patch, `+ ${again.name}`);
@@ -169,20 +169,23 @@ function listPanel(chain: string, compact: boolean): string {
   const known = new Set(items.map((l) => l.name.toLowerCase()));
   const k = kindOf(chain);
   // al je vaste producten, in jouw woorden ("Volle yoghurt", "Kipfilet broodbeleg"); wat hier te koop is eerst
-  const onListNow = new Set(todo.map((l) => l.name.toLowerCase()));
-  const mine = H().products.filter((p) => !onListNow.has(p.name.toLowerCase()))
+  const onListNow = new Set(todo.map((l) => `${l.name.toLowerCase()}|${(l.spec ?? '').toLowerCase()}`));
+  const mine = H().products
     .sort((x, y) => Number(!!x.where.length && !x.where.includes(k)) - Number(!!y.where.length && !y.where.includes(k)) || x.name.localeCompare(y.name));
   const productNames = new Set(H().products.map((p) => p.name.toLowerCase()));
   // algemene suggesties alleen als geen vast product dat al dekt ("Yoghurt" niet als je "Volle yoghurt" hebt)
   const covered = (q: string): boolean => H().products.some((p) => p.name.toLowerCase().includes(q.toLowerCase().replace(/s$|en$/, '')));
   const catalog = QUICK.filter((q) => !known.has(q.toLowerCase()) && !covered(q));
   const maxTodo = compact ? 6 : 999, maxSug = compact ? 6 : 18;
-  const prodTile = (p: Product): string => `<button class="tile sug" data-action="li-prod" data-id="${esc(p.id)}" aria-label="${esc(p.name)} op de lijst zetten">${iconFor(p.name)}<span class="nm">${esc(p.name)}</span>${p.wants ? `<span class="sp">${esc(p.wants)}</span>` : ''}</button>`;
+  // per vast product een tegel voor de gewone keuze en één per variant ("Bananen" en "Bananen · biologisch")
+  const prodTiles = (p: Product): string[] => [null, ...(p.variants ?? [])]
+    .filter((v) => !onListNow.has(`${p.name.toLowerCase()}|${(v ?? '').toLowerCase()}`))
+    .map((v) => `<button class="tile sug" data-action="li-prod" data-id="${esc(p.id)}" data-spec="${esc(v ?? '')}" aria-label="${esc(p.name)}${v ? ', ' + esc(v) : ''} op de lijst zetten">${iconFor(p.name)}<span class="nm">${esc(p.name)}</span>${v ? `<span class="sp var">${esc(v)}</span>` : p.wants ? `<span class="sp">${esc(p.wants)}</span>` : ''}</button>`);
   // vaste producten altijd allemaal; daarna onlangs gekocht en algemene suggesties tot het maximum
   const extra = recent.filter((l) => !productNames.has(l.name.toLowerCase())).map(tile)
     .concat(catalog.map((q) => `<button class="tile sug" data-action="li-quick" data-v="${esc(q)}" aria-label="${esc(q)} op de lijst zetten">${iconFor(q)}<span class="nm">${esc(q)}</span></button>`))
     .slice(0, Math.max(0, maxSug - mine.length));
-  const sugTiles = mine.map(prodTile).concat(extra);
+  const sugTiles = mine.flatMap(prodTiles).concat(extra);
   return `
     <form class="add-row" id="li-form" autocomplete="off">
       <label for="li-new" class="sr-only">Product toevoegen</label>
@@ -346,7 +349,7 @@ function viewProducten(): string {
   const rows = H().products.slice().sort((x, y) => x.name.localeCompare(y.name)).map((p) => {
     return `<div class="prod-row">${iconFor(p.name)}<div style="min-width:0"><div style="font-weight:700">${esc(p.name)}</div>
       <div class="unit">${esc([p.brand, p.where.length ? anyLabel(p.where) : 'Overal'].filter(Boolean).join(' · '))}</div>
-      ${p.wants || p.avoid ? `<div class="unit prefs">${p.wants ? `<span>Wel: ${esc(p.wants)}</span>` : ''}${p.avoid ? `<span>Niet: ${esc(p.avoid)}</span>` : ''}</div>` : ''}
+      ${p.wants || p.avoid || p.variants?.length ? `<div class="unit prefs">${p.wants ? `<span>Wel: ${esc(p.wants)}</span>` : ''}${p.variants?.length ? `<span>Ook: ${esc(p.variants.join(', '))}</span>` : ''}${p.avoid ? `<span>Niet: ${esc(p.avoid)}</span>` : ''}</div>` : ''}
       ${p.loose || searching(p) ? `<div class="where-tag">${p.loose ? '<span class="chip">Los, zonder barcode</span>' : ''}${searching(p) ? '<span class="chip soon">Wordt gezocht…</span>' : ''}</div>` : ''}
       ${productDeals(p).slice(0, 2).map(({ dl, w }) => productDealRow(p, dl, w)).join('')}</div>
       <div class="prod-actions">${p.where.includes('online') ? `<button class="btn small ghost" data-action="prod-scan" data-id="${esc(p.id)}" ${searching(p) ? 'disabled' : ''}>Zoek nu online</button>` : ''}<button class="btn small ghost" data-action="prod-edit" data-id="${esc(p.id)}">Bewerken</button></div></div>`;
@@ -407,8 +410,9 @@ function sheetHtml(): string {
       <label>Naam<input name="name" required maxlength="80" value="${esc(p.name)}" placeholder="Bijv. Jonagold appels"></label>
       <label>Merk<input name="brand" maxlength="40" value="${esc(p.brand ?? '')}" placeholder="Leeg = maakt niet uit"></label>
       <label>Wat wil je precies?<input name="wants" maxlength="120" value="${esc(p.wants ?? '')}" placeholder="Bijv. groot stuk, jong belegen · halfvol · voor avondeten"></label>
+      <label>Varianten die je soms koopt<input name="variants" maxlength="120" value="${esc((p.variants ?? []).join(', '))}" placeholder="Bijv. biologisch (met komma's)"></label>
       <label>Wat juist niet?<input name="avoid" maxlength="120" value="${esc(p.avoid ?? '')}" placeholder="Bijv. plakken · vleeswaren voor op brood"></label>
-      <p class="hint">Hiermee kiest de aanbiedingen-taak alleen acties die echt bij je passen.</p>
+      <p class="hint">Hiermee kiest de aanbiedingen-taak alleen acties die echt bij je passen. Elke variant krijgt een eigen tegel bij Boodschappen en wordt apart gezocht.</p>
       <fieldset><legend>Te koop bij</legend><div class="quick">${kinds.map((k) => `<label class="chk-chip"><input type="checkbox" name="where" value="${k}" ${p.where.includes(k) ? 'checked' : ''}> ${esc(KIND_NAME[k])}</label>`).join('')}</div>
         <p class="hint">Niets aangevinkt = maakt niet uit waar.</p></fieldset>
       <label class="chk"><input type="checkbox" name="loose" ${p.loose ? 'checked' : ''}> Los, zonder barcode</label>
@@ -583,7 +587,7 @@ document.addEventListener('click', (e) => {
   switch (act) {
     case 'li-out': { const it = L().find((x) => x.id === id); if (!it) return; el.classList.add('pop'); setTimeout(() => takeOff(it), 140); break; }
     case 'li-in': el.classList.add('pop'); setTimeout(() => setItem(id, { done: false, doneAt: null, createdAt: Date.now() }, `+ ${L().find((x) => x.id === id)?.name ?? ''}`), 140); break;
-    case 'li-prod': { const p = product(id); if (!p) return; el.classList.add('pop'); addItem({ name: p.name, productId: p.id });
+    case 'li-prod': { const p = product(id); if (!p) return; el.classList.add('pop'); addItem({ name: p.name, productId: p.id, spec: el.dataset.spec || null });
       const k = kindOf(currentChain()); if (p.where.length && !p.where.includes(k)) toast(`${p.name} staat op je lijst voor ${anyLabel(p.where).toLowerCase()}`); break; }
     case 'scan-all': { const now = Date.now(); house.mutate((h) => { h.scanAllAt = now; }, 'Zoek alle producten nu').catch(() => {}); toast('Skwirl zoekt nu alle acties. Dat duurt 5 à 10 minuten.'); break; }
     case 'prod-scan': { const p = product(id); if (!p) return; const now = Date.now();
@@ -694,7 +698,7 @@ document.addEventListener('submit', (e) => {
   }
   if (form.id === 'prod-form' && sheet?.type === 'product') {
     const pid = sheet.id ?? uid('p');
-    const fields = { name: get('name'), brand: get('brand') || null, wants: get('wants') || null, avoid: get('avoid') || null, where: fd.getAll('where').map(String) as Kind[], loose: fd.get('loose') === 'on' };
+    const fields = { name: get('name'), brand: get('brand') || null, wants: get('wants') || null, avoid: get('avoid') || null, variants: get('variants').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 6), where: fd.getAll('where').map(String) as Kind[], loose: fd.get('loose') === 'on' };
     if (!fields.name) { toast('Geef het product een naam'); return; }
     const isNew = !sheet.id; sheet = null;
     house.mutate((h) => {

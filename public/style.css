@@ -371,3 +371,4 @@ select.sel { border: 1px solid var(--line); background: var(--surface); border-r
 .none-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .card.pd { padding-top: 14px; }
 .card.pd .pd-row { padding-left: 0; }
+.tile .sp.var { color: var(--pine); font-weight: 700; }
