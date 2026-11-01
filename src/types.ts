@@ -45,6 +45,8 @@ export interface Product {
   /** Titels van acties waarvan je zei "Klopt" of "Past niet"; de scan leert hiervan */
   likes?: string[];
   dislikes?: string[];
+  /** Moment waarop je "Zoek nu" koos; de scan pakt dit product dan direct op */
+  scanAt?: number | null;
   /** Aankoopmomenten (ms), nieuwste achteraan; hieruit leert Skwirl je koopritme */
   bought?: number[];
   /** Oud veld: handmatig ingesteld aantal dagen; alleen gebruikt zolang er te weinig aankopen zijn */
@@ -56,7 +58,7 @@ export interface Product {
   note: string | null;
 }
 
-export interface Household { version: 1; addresses: Address[]; stores: Store[]; chains: Record<string, { name: string; kind: Kind }>; products: Product[] }
+export interface Household { version: 1; addresses: Address[]; stores: Store[]; chains: Record<string, { name: string; kind: Kind }>; products: Product[]; /** "Alles nu zoeken": start een volledige scan */ scanAllAt?: number | null }
 
 export interface Deal {
   id: string;

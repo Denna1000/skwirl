@@ -4,8 +4,8 @@ Slim inslaan. Nooit te veel betalen.
 
 Een gedeeld boodschappenlijstje voor twee, met vaste producten, je eigen plekken en aanbiedingen (ook komende, dag- en weekendacties). De app draait gratis op GitHub Pages; alle gegevens staan in een **privé** GitHub-repository. Er is geen server en geen account bij een andere dienst nodig.
 
-- **Boodschappen**: per winkel, tegels zoals in Bring. Tik erop of eraf; houd ingedrukt voor eigenschap (bio, 500 ml) of aantal. Producten kunnen voor "elke supermarkt" of "drogist of online" gelden.
-- **Vandaag**: je lijstje, de beste winkel voor de aanbiedingen van nu, en wat bijna op is.
+- **Vandaag**: al je vaste producten die nu of binnenkort in de aanbieding zijn, met alle acties, prijs per kilo/liter en "Nu zoeken".
+- **Boodschappen**: per winkel, tegels zoals in Bring. Tik erop of eraf; houd ingedrukt voor eigenschap (bio, 500 ml) of aantal. Suggesties gebruiken je eigen vaste producten ("Volle yoghurt" in plaats van "Yoghurt").
 - **Folders**: per winkel de dag- en weekendacties, deze week en volgende week, met een knop naar de echte folder.
 - **Producten**: wat je steeds opnieuw koopt, met merk, wat je wél wilt ("groot stuk", "halfvol") en wat niet ("plakken"). Skwirl leert uit je aankopen hoe vaak je het koopt en laat altijd zien wanneer het in de aanbieding is, ook online.
 - **Plekken**: je adressen en de winkels die je volgt, en een koppellink voor een tweede telefoon.

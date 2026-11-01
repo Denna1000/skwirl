@@ -368,3 +368,6 @@ select.sel { border: 1px solid var(--line); background: var(--surface); border-r
 .learned .chip { white-space: normal; text-align: left; }
 .learned .chip button { border: 0; background: none; color: inherit; font-size: 14px; padding: 0 0 0 4px; cursor: pointer; }
 .chip.danger { background: var(--danger-soft); color: var(--danger); }
+.none-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.card.pd { padding-top: 14px; }
+.card.pd .pd-row { padding-left: 0; }
