@@ -1,7 +1,7 @@
 // Gedeelde datavormen. Alles staat als JSON in de privé-repository met gegevens.
 
 /** Soort winkel: een product "voor elke supermarkt" verschijnt bij alle supermarkten. */
-export type Kind = 'super' | 'drogist' | 'online' | 'bouw' | 'dier' | 'slager' | 'overig';
+export type Kind = 'super' | 'bio' | 'drogist' | 'online' | 'bouw' | 'dier' | 'slager' | 'overig';
 
 export interface ListItem {
   id: string;

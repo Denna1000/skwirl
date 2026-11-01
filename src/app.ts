@@ -26,7 +26,7 @@ const MAX_RECENT = 40;
 
 const DEFAULT_CHAINS: Household['chains'] = {
   ah: { name: 'Albert Heijn', kind: 'super' }, jumbo: { name: 'Jumbo', kind: 'super' }, lidl: { name: 'Lidl', kind: 'super' },
-  vomar: { name: 'Vomar', kind: 'super' }, ekoplaza: { name: 'Ekoplaza', kind: 'super' }, aldi: { name: 'Aldi', kind: 'super' }, dekamarkt: { name: 'DekaMarkt', kind: 'super' },
+  vomar: { name: 'Vomar', kind: 'super' }, ekoplaza: { name: 'Ekoplaza', kind: 'bio' }, aldi: { name: 'Aldi', kind: 'super' }, dekamarkt: { name: 'DekaMarkt', kind: 'super' },
   kruidvat: { name: 'Kruidvat', kind: 'drogist' }, etos: { name: 'Etos', kind: 'drogist' },
   gamma: { name: 'Gamma', kind: 'bouw' }, praxis: { name: 'Praxis', kind: 'bouw' }, pets: { name: 'Pets Place', kind: 'dier' },
   bol: { name: 'bol.com', kind: 'online' },
@@ -37,8 +37,8 @@ const FOLDER_PAGES: Record<string, string> = {
   vomar: 'https://www.vomar.nl/aanbiedingen', ekoplaza: 'https://www.ekoplaza.nl/nl/aanbiedingen', kruidvat: 'https://www.kruidvat.nl/acties', etos: 'https://www.etos.nl/acties/',
   gamma: 'https://www.gamma.nl/folder', pets: 'https://www.petsplace.nl/acties', bol: 'https://www.bol.com/nl/nl/sf/aanbiedingen/',
 };
-const KIND_ANY: Record<Kind, string> = { super: 'elke supermarkt', drogist: 'elke drogist', online: 'online', bouw: 'elke bouwmarkt', dier: 'elke dierenwinkel', slager: 'elke slager', overig: 'overal' };
-const KIND_NAME: Record<Kind, string> = { super: 'Supermarkt', drogist: 'Drogist', online: 'Online', bouw: 'Bouwmarkt', dier: 'Dierenwinkel', slager: 'Slager', overig: 'Overig' };
+const KIND_ANY: Record<Kind, string> = { super: 'elke supermarkt', bio: 'de natuurwinkel', drogist: 'elke drogist', online: 'online', bouw: 'elke bouwmarkt', dier: 'elke dierenwinkel', slager: 'elke slager', overig: 'overal' };
+const KIND_NAME: Record<Kind, string> = { super: 'Supermarkt', bio: 'Natuurwinkel (Ekoplaza)', drogist: 'Drogist', online: 'Online', bouw: 'Bouwmarkt', dier: 'Dierenwinkel', slager: 'Slager', overig: 'Overig' };
 const QUICK = ['Bananen', 'Appels', 'Melk', 'Brood', 'Eieren', 'Kaas', 'Tomaten', 'Komkommer', 'Yoghurt', 'Mandarijnen', 'Boter', 'Koffie'];
 const SPEC_CHIPS = ['bio', 'groot', 'klein', 'light', 'vegan', '500 g', '1 kg', '500 ml', '1 liter'];
 
@@ -411,7 +411,7 @@ function sheetHtml(): string {
 
   if (sheet.type === 'product') {
     const p = product(sheet.id) ?? { id: '', name: '', where: [], loose: false, normal: null, lastBought: null, note: null } as Product;
-    const kinds: Kind[] = ['super', 'drogist', 'online', 'slager', 'bouw'];
+    const kinds: Kind[] = ['super', 'bio', 'drogist', 'online', 'slager', 'bouw'];
     return wrap(sheet.id ? p.name : 'Product toevoegen', `<form id="prod-form" class="sheet-form">
       <label>Naam<input name="name" required maxlength="80" value="${esc(p.name)}" placeholder="Bijv. Jonagold appels"></label>
       <label>Merk<input name="brand" maxlength="40" value="${esc(p.brand ?? '')}" placeholder="Leeg = maakt niet uit"></label>
@@ -560,6 +560,8 @@ async function connect(): Promise<void> {
   render();
   await pullAll();
   if (!H().chains || !Object.keys(H().chains).length) house.mutate((h) => { h.chains = { ...DEFAULT_CHAINS, ...(h.chains ?? {}) }; }, 'Ketens toegevoegd').catch(() => {});
+  // Ekoplaza is een natuurwinkel, geen gewone supermarkt: "elke supermarkt" geldt daar niet
+  if (H().chains?.ekoplaza?.kind === 'super') house.mutate((h) => { if (h.chains.ekoplaza) h.chains.ekoplaza.kind = 'bio'; h.stores.filter((s) => s.chain === 'ekoplaza').forEach((s) => { s.type = KIND_NAME.bio; }); }, 'Ekoplaza is een natuurwinkel').catch(() => {});
   startPolling();
 }
 
