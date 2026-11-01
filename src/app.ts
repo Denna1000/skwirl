@@ -281,12 +281,12 @@ function viewVandaag(): string {
   const card = ({ p, ds }: { p: Product; ds: ReturnType<typeof productDeals> }): string => `<section class="card pd">
       <div class="pd-name">${iconFor(p.name)}<span>${esc(p.name)}</span>${searching(p) ? '<span class="chip soon">Wordt gezocht…</span>' : ''}</div>
       ${ds.map(({ dl, w }) => productDealRow(p, dl, w)).join('')}</section>`;
-  const cards = (nowList.length ? `<h2 class="group-h">Nu in de aanbieding</h2>${nowList.map(card).join('')}` : '')
-    + (soonList.length ? `<h2 class="group-h">Binnenkort in de aanbieding</h2><p class="sub group-sub">Uit de folder van volgende week of acties die later beginnen.</p>${soonList.map(card).join('')}` : '');
+  const cards = `<h2 class="group-h">Nu in de aanbieding</h2>${nowList.length ? nowList.map(card).join('') : '<p class="sub group-sub">Op dit moment geen acties voor je vaste producten.</p>'}`
+    + `<h2 class="group-h">Binnenkort in de aanbieding</h2><p class="sub group-sub">${soonList.length ? 'Uit de folder van volgende week of acties die later beginnen.' : 'Nog geen komende acties gevonden. Zodra de folder van volgende week online staat, pikt de scan hem op.'}</p>${soonList.map(card).join('')}`;
   const rest = none.length ? `<section class="card"><h3>Nu geen actie</h3><div class="none-list">${none.map((p) => `<span class="chip">${esc(p.name)}${searching(p) ? ' · zoeken…' : ''}</span>`).join('')}</div></section>` : '';
   return `<div class="section-head"><div><div class="eyebrow">${esc(dateStr)}</div><h1>In de aanbieding</h1><p class="sub">${esc(status)}</p></div>
       <button class="btn" data-action="scan-all" ${searching() ? 'disabled' : ''}>Nu zoeken</button></div>
-    <div class="stack">${cards || (H().products.length ? '<div class="empty">Op dit moment geen acties voor je vaste producten.</div>' : '<div class="empty">Voeg bij Producten toe wat je steeds opnieuw koopt. Skwirl zoekt dan de acties.</div>')}${rest}</div>`;
+    <div class="stack">${H().products.length ? cards : '<div class="empty">Voeg bij Producten toe wat je steeds opnieuw koopt. Skwirl zoekt dan de acties.</div>'}${rest}</div>`;
 }
 
 function viewLijstje(): string {
