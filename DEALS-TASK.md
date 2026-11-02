@@ -4,9 +4,10 @@ De aanbiedingen komen van Claude, via een GitHub Actions-workflow in de privé-r
 
 | Wanneer | Wat |
 |---|---|
-| werkdagen ±9:30, als je Mac aanstaat | je **Mac** haalt de folders op die GitHub-servers niet mogen ophalen (AH, Vomar via supermarktaanbiedingen.com) en zet ze in `bron/folders.json`. Daarna start op GitHub een **volledige scan** |
+| werkdagen, het eerste moment na 9:30 dat je Mac aanstaat | je **Mac** haalt de folders op die GitHub-servers niet mogen ophalen (AH, Vomar via supermarktaanbiedingen.com) en zet ze in `bron/folders.json`. Daarna start op GitHub een **volledige scan** |
 | zaterdag 08:00 | **volledige scan** met de laatste folders van de Mac (tot 4 dagen oud), Ekoplaza en zoekmachines |
 | direct als je in de app een vast product toevoegt of aanpast | **snelle scan** voor alleen dat product (na ±2 tot 5 minuten zichtbaar) |
+| "Nu zoeken" in de app | volledige scan op GitHub; staat je Mac aan, dan haalt die binnen een kwartier ook verse folders op (daarna nog een scan) |
 | met de hand | GitHub → `skwirl-data` → **Actions → Aanbiedingen → Run workflow** (optioneel met product-id's) |
 
 De opdracht voor Claude staat in `skwirl-data/SCAN.md`. De workflow staat in `skwirl-data/.github/workflows/aanbiedingen.yml`.
@@ -25,7 +26,7 @@ GitHub Actions is gratis tot 2.000 minuten per maand voor privé-repositories; e
 
 ## De Mac als bron (eenmalig instellen)
 
-Sommige sites weigeren de servers van GitHub. Daarom haalt je Mac die pagina's op, zoals een gewone bezoeker, op werkdagen om 9:30. Stond de Mac dan in slaapstand, dan gebeurt het zodra hij weer wakker wordt. Staat hij uit, dan slaat hij die dag over.
+Sommige sites weigeren de servers van GitHub. Daarom haalt je Mac die pagina's op, zoals een gewone bezoeker. De Mac kijkt elk kwartier dat hij aanstaat of het tijd is: op werkdagen het eerste moment na 9:30 (één keer per dag), of als iemand in de app op "Nu zoeken" tikte. Ben je vrij en staat de Mac pas om 14:00 aan, dan gebeurt het om 14:00.
 
 1. **Sleutel voor de Mac.** Maak op GitHub een fine-grained token die alleen bij `skwirl-data` mag, met **Contents: Read and write** (zoals die voor de app; je mag ook dezelfde gebruiken).
 2. **Sleutel in de sleutelhanger zetten.** Open Terminal en typ (je plakt de token twee keer; je ziet niets terwijl je plakt):

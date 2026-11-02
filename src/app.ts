@@ -287,7 +287,7 @@ function viewVandaag(): string {
   const cards = `<h2 class="group-h">Nu in de aanbieding</h2>${nowList.length ? nowList.map(card).join('') : '<p class="sub group-sub">Op dit moment geen acties voor je vaste producten.</p>'}`
     + `<h2 class="group-h">Binnenkort in de aanbieding</h2><p class="sub group-sub">${soonList.length ? 'Uit de folder van volgende week of acties die later beginnen.' : 'Nog geen komende acties gevonden. Zodra de folder van volgende week online staat, pikt de scan hem op.'}</p>${soonList.map(card).join('')}`;
   const rest = none.length ? `<section class="card"><h3>Nu geen actie</h3><div class="none-list">${none.map((p) => `<span class="chip">${esc(p.name)}${searching(p) ? ' · zoeken…' : ''}</span>`).join('')}</div></section>` : '';
-  return `<div class="section-head"><div><div class="eyebrow">${esc(dateStr)}</div><h1>In de aanbieding</h1><p class="sub">${esc(status)}</p></div>
+  return `<div class="section-head"><div><div class="eyebrow">${esc(dateStr)}</div><h1>In de aanbieding</h1><p class="sub">${esc(status)}</p><p class="hint">Staat je Mac aan? Dan haalt die bij "Nu zoeken" binnen een kwartier ook de folders van AH en Vomar op.</p></div>
       <button class="btn" data-action="scan-all" ${searching() ? 'disabled' : ''}>Nu zoeken</button></div>
     <div class="stack">${H().products.length ? cards : '<div class="empty">Voeg bij Producten toe wat je steeds opnieuw koopt. Skwirl zoekt dan de acties.</div>'}${rest}</div>`;
 }
