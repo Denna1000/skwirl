@@ -241,7 +241,9 @@ const fbButtons = (dl: Deal): string => `<div class="fb"><span>Is dit wat je zoe
 
 /** Alle lopende en komende acties voor een vast product: nu eerst, zeker voor twijfel, dan goedkoopst */
 function productDeals(p: Product): { dl: Deal; w: ReturnType<typeof dealWhen> }[] {
-  return liveDeals().filter((dl) => dl.productId === p.id && dealVisible(dl) && feedback(p, dl) !== 'no').map((dl) => ({ dl, w: dealWhen(dl) }))
+  // alleen acties bij een soort winkel waar je dit product koopt (bijv. niet Ekoplaza bij "elke supermarkt")
+  const sold = (dl: Deal): boolean => !p.where.length || p.where.includes(kindOf(dl.chain));
+  return liveDeals().filter((dl) => dl.productId === p.id && dealVisible(dl) && sold(dl) && feedback(p, dl) !== 'no').map((dl) => ({ dl, w: dealWhen(dl) }))
     .sort((x, y) => Number(x.w.state === 'soon') - Number(y.w.state === 'soon') || Number(doubtful(p, x.dl)) - Number(doubtful(p, y.dl)) || compareValue(x.dl, y.dl) || x.w.startsIn - y.w.startsIn);
 }
 function productDealRow(p: Product, dl: Deal, w: ReturnType<typeof dealWhen>): string {
