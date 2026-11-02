@@ -4,7 +4,8 @@ De aanbiedingen komen van Claude, via een GitHub Actions-workflow in de privé-r
 
 | Wanneer | Wat |
 |---|---|
-| maandag, donderdag en zaterdag, 06:00 | **volledige scan**: alle folders van je winkels, dag- en weekendacties, de folder van volgende week en online acties |
+| werkdagen ±9:30, als je Mac aanstaat | je **Mac** haalt de folders op die GitHub-servers niet mogen ophalen (AH, Vomar via supermarktaanbiedingen.com) en zet ze in `bron/folders.json`. Daarna start op GitHub een **volledige scan** |
+| zaterdag 08:00 | **volledige scan** met de laatste folders van de Mac (tot 4 dagen oud), Ekoplaza en zoekmachines |
 | direct als je in de app een vast product toevoegt of aanpast | **snelle scan** voor alleen dat product (na ±2 tot 5 minuten zichtbaar) |
 | met de hand | GitHub → `skwirl-data` → **Actions → Aanbiedingen → Run workflow** (optioneel met product-id's) |
 
@@ -21,3 +22,31 @@ De opdracht voor Claude staat in `skwirl-data/SCAN.md`. De workflow staat in `sk
 ## Kosten
 
 GitHub Actions is gratis tot 2.000 minuten per maand voor privé-repositories; een scan duurt een paar minuten. Claude rekent af via het abonnement van het account waarvan de token is.
+
+## De Mac als bron (eenmalig instellen)
+
+Sommige sites weigeren de servers van GitHub. Daarom haalt je Mac die pagina's op, zoals een gewone bezoeker, op werkdagen om 9:30. Stond de Mac dan in slaapstand, dan gebeurt het zodra hij weer wakker wordt. Staat hij uit, dan slaat hij die dag over.
+
+1. **Sleutel voor de Mac.** Maak op GitHub een fine-grained token die alleen bij `skwirl-data` mag, met **Contents: Read and write** (zoals die voor de app; je mag ook dezelfde gebruiken).
+2. **Sleutel in de sleutelhanger zetten.** Open Terminal en typ (je plakt de token twee keer; je ziet niets terwijl je plakt):
+
+   ```bash
+   security add-generic-password -a skwirl -s skwirl-github -T /usr/bin/security -w
+   ```
+
+3. **Testen:**
+
+   ```bash
+   node ~/skwirl-data/scripts/mac-bron.mjs
+   ```
+
+   Je ziet per keten het aantal regels en daarna "Verstuurd". Een paar minuten later staat er op GitHub een commit "Aanbiedingen …".
+
+De taak staat in `~/Library/LaunchAgents/nl.skwirl.folders.plist`; het logboek in `~/Library/Logs/skwirl-folders.log`.
+
+**Stoppen:**
+
+```bash
+launchctl bootout gui/$(id -u)/nl.skwirl.folders
+```
+
