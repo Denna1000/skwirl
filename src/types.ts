@@ -95,3 +95,16 @@ export interface Deal {
 export interface FolderLink { chain: string; from: string | null; until: string | null; url: string }
 
 export interface DealsFile { updatedAt: string | null; source: string | null; deals: Deal[]; folders?: FolderLink[] }
+
+/** Een telefoon die meldingen wil krijgen (Web Push) */
+export interface PushSub { device: string; name: string; endpoint: string; keys: { p256dh: string; auth: string }; at: number }
+
+/** push.json: de sleutel waarmee meldingen worden ondertekend, en wie ze wil krijgen */
+export interface PushFile {
+  vapid: { publicKey: string; privateJwk: JsonWebKey; contact: string } | null;
+  subs: PushSub[];
+}
+
+/** melding.json: de laatste melding die de app klaarzette; een workflow verstuurt hem */
+export interface Melding { id: string; from: string; added: string[]; removed: string[]; at: number; test?: boolean }
+export interface MeldingFile { last: Melding | null }

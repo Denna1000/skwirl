@@ -2,7 +2,8 @@
 // Alle gegevens staan als JSON in een privé GitHub-repository; deze code bevat geen persoonlijke gegevens.
 
 import { JsonFile, checkConnection, GitHubError, type Connection } from './github.js';
-import type { Address, Deal, DealsFile, FolderLink, Household, Kind, ListFile, ListItem, Product, Store } from './types.js';
+import type { Address, Deal, DealsFile, FolderLink, Household, Kind, ListFile, ListItem, MeldingFile, Product, PushFile, Store } from './types.js';
+import { deviceId, flushOutbox, newVapid, note, pushSupported, setSender, subscribe, unsubscribe } from './notify.js';
 import { parseEntry } from './parse.js';
 import { dealWhen } from './deals.js';
 import { addPurchase, learnedInterval } from './rhythm.js';
@@ -59,6 +60,8 @@ let cfg = load<Config>(CFG_KEY);
 const ui: Ui = Object.assign({ tab: 'vandaag', addr: null, listChain: 'ah', addAny: true, dealsMine: false } as Ui, load<Partial<Ui>>(UI_KEY));
 let list: JsonFile<ListFile> | null = null;
 let house: JsonFile<Household> | null = null;
+let pushF: JsonFile<PushFile> | null = null;
+let meld: JsonFile<MeldingFile> | null = null;
 let deals: JsonFile<DealsFile> | null = null;
 let syncState: { kind: 'ok' | 'busy' | 'offline' | 'error'; at: number | null; msg: string } = { kind: 'busy', at: null, msg: '' };
 let sheet: null | { type: 'item'; id: string } | { type: 'product'; id: string | null } | { type: 'store' } | { type: 'address' } | { type: 'share' } = null;
@@ -118,6 +121,9 @@ function matchProduct(name: string): Product | undefined {
   const hits = H().products.filter((x) => x.name.toLowerCase().includes(n.replace(/s$|en$/, '')));
   return hits.length === 1 && n.length >= 3 ? hits[0] : undefined;
 }
+/** Zoals het in een melding staat: "Bananen (biologisch)" */
+const label = (name: string, spec?: string | null): string => spec ? `${name} (${spec})` : name;
+
 function addItem(fields: Partial<ListItem> & { name: string }, chain = currentChain()): void {
   const p = fields.productId ? product(fields.productId) : matchProduct(fields.name);
   if (p && !fields.productId && !fields.dealId) fields = { ...fields, name: p.name };
@@ -126,6 +132,7 @@ function addItem(fields: Partial<ListItem> & { name: string }, chain = currentCh
   if (again && !fields.dealId) {
     const patch = { done: false, doneAt: null, createdAt: Date.now(), ...(fields.spec ? { spec: fields.spec } : {}), ...(fields.qty && fields.qty > 1 ? { qty: fields.qty } : {}) };
     setItem(again.id, patch, `+ ${again.name}`);
+    note('add', label(again.name, fields.spec ?? again.spec));
     return;
   }
   const item: ListItem = {
@@ -133,6 +140,7 @@ function addItem(fields: Partial<ListItem> & { name: string }, chain = currentCh
     addedBy: cfg?.name ?? null, productId: p?.id ?? null, dealId: null, ...fields,
   };
   list!.mutate((d) => { if (!d.items.some((x) => x.id === item.id)) d.items.push(item); }, `+ ${item.name}`).catch(() => {});
+  note('add', label(item.name, item.spec));
 }
 function setItem(id: string, patch: Partial<ListItem>, msg: string): void {
   list!.mutate((d) => { const it = d.items.find((x) => x.id === id); if (it) Object.assign(it, patch); }, msg).catch(() => {});
@@ -140,6 +148,7 @@ function setItem(id: string, patch: Partial<ListItem>, msg: string): void {
 function removeItem(id: string): void {
   const it = L().find((x) => x.id === id);
   list!.mutate((d) => { d.items = d.items.filter((x) => x.id !== id); }, `× ${it?.name ?? 'product'}`).catch(() => {});
+  if (it && !it.done) note('off', label(it.name, it.spec));
 }
 function takeOff(it: ListItem): void {
   const now = Date.now();
@@ -148,6 +157,7 @@ function takeOff(it: ListItem): void {
     const old = d.items.filter((y) => y.done).sort((a, b) => (b.doneAt ?? 0) - (a.doneAt ?? 0)).slice(MAX_RECENT).map((y) => y.id);
     if (old.length) d.items = d.items.filter((y) => !old.includes(y.id));
   }, `✓ ${it.name}`).catch(() => {});
+  note('off', label(it.name, it.spec));
   if (it.productId && product(it.productId)) {
     house!.mutate((h) => { const p = h.products.find((x) => x.id === it.productId); if (p) { p.lastBought = now; p.bought = addPurchase(p.bought, now); } }, `Gekocht: ${it.name}`).catch(() => {});
   }
@@ -387,7 +397,46 @@ function viewPlekken(): string {
     <section class="card" style="margin-top:16px"><h2>Samen gebruiken</h2>
       <p class="sub">Verbonden met <strong>${esc(cfg!.owner)}/${esc(cfg!.repo)}</strong> als <strong>${esc(cfg!.name)}</strong>.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn" data-action="share">Telefoon koppelen</button><button class="btn ghost" data-action="disconnect">Ontkoppelen op dit apparaat</button></div>
-      <p class="hint">Versie ${esc(APP_VERSION.slice(0, 7))}</p></section>`;
+</section>
+    ${meldingenCard()}
+    <p class="hint">Versie ${esc(APP_VERSION.slice(0, 7))}</p>`;
+}
+
+function meldingenCard(): string {
+  const subs = pushF?.data.subs ?? [];
+  const mine = subs.some((s) => s.device === deviceId());
+  const who = [...new Set(subs.map((s) => s.name))];
+  let body: string;
+  if (!pushSupported()) body = '<p class="sub">Op een iPhone kan dit alleen in de app op je beginscherm (iOS 16.4 of nieuwer). Open Skwirl via het eikeltje en kijk hier opnieuw.</p>';
+  else if (Notification.permission === 'denied') body = '<p class="sub">Meldingen staan uit voor Skwirl. Zet ze aan bij Instellingen → Meldingen → Skwirl en kijk hier opnieuw.</p>';
+  else if (mine) body = `<p class="sub">Aan op deze telefoon. Je krijgt een melding als iemand anders iets op de lijst zet of afstreept.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn" data-action="push-test">Testmelding</button><button class="btn ghost" data-action="push-off">Uitzetten</button></div>`;
+  else body = `<p class="sub">Krijg een melding als iemand anders iets op de lijst zet of afstreept.</p>
+    <div style="margin-top:10px"><button class="btn primary" data-action="push-on">Meldingen aanzetten</button></div>`;
+  return `<section class="card" style="margin-top:16px"><h2>Meldingen</h2>${body}
+    ${who.length ? `<p class="hint">Aan bij: ${who.map(esc).join(', ')}</p>` : ''}</section>`;
+}
+
+async function pushOn(): Promise<void> {
+  // eerst de toestemming vragen: op een iPhone moet dat direct na de tik
+  if (await Notification.requestPermission() !== 'granted') { toast('Geen toestemming voor meldingen'); render(); return; }
+  try {
+    if (!pushF!.data.vapid) {
+      const v = await newVapid(location.origin + location.pathname);
+      await pushF!.mutate((d) => { d.vapid ??= v; }, 'Sleutel voor meldingen');
+    }
+    const sub = await subscribe(pushF!.data.vapid!.publicKey);
+    const me = { device: deviceId(), name: cfg!.name, ...sub, at: Date.now() };
+    await pushF!.mutate((d) => { d.subs = d.subs.filter((s) => s.device !== me.device && s.endpoint !== me.endpoint); d.subs.push(me); }, `Meldingen aan voor ${cfg!.name}`);
+    toast('Meldingen staan aan');
+  } catch (e) { toast(`Meldingen aanzetten lukte niet: ${e instanceof Error ? e.message : String(e)}`); }
+  render();
+}
+async function pushOff(): Promise<void> {
+  const dev = deviceId();
+  try { await unsubscribe(); } catch { /* toch uit de lijst halen */ }
+  await pushF!.mutate((d) => { d.subs = d.subs.filter((s) => s.device !== dev); }, `Meldingen uit voor ${cfg!.name}`);
+  toast('Meldingen staan uit'); render();
 }
 
 /* ---------- Panelen (onderin) ---------- */
@@ -538,7 +587,7 @@ function onSyncError(e: unknown): void {
 async function pullAll(): Promise<void> {
   if (!list || !house || !deals) return;
   try {
-    await Promise.all([list.pull(), house.pull(), deals.pull()]);
+    await Promise.all([list.pull(), house.pull(), deals.pull(), pushF?.pull()]);
     syncState = { kind: 'ok', at: Date.now(), msg: '' };
   } catch (e) { onSyncError(e); return; }
   render();
@@ -554,6 +603,16 @@ async function connect(): Promise<void> {
   list = new JsonFile(conn, 'list.json', emptyList, cache?.list);
   house = new JsonFile(conn, 'household.json', emptyHousehold, cache?.house);
   deals = new JsonFile(conn, 'deals.json', emptyDeals, cache?.deals);
+  pushF = new JsonFile(conn, 'push.json', (): PushFile => ({ vapid: null, subs: [] }));
+  meld = new JsonFile(conn, 'melding.json', (): MeldingFile => ({ last: null }));
+  pushF.onChange = () => render();
+  pushF.onError = onSyncError;
+  // melding pas klaarzetten als iemand anders meldingen aan heeft; een workflow verstuurt hem
+  setSender(async (o) => {
+    if (!pushF!.data.subs.some((s) => s.name !== cfg!.name)) return;
+    const last = { id: uid('m'), from: cfg!.name, added: o.added, removed: o.removed, at: Date.now() };
+    await meld!.mutate((d) => { d.last = last; }, `Melding van ${cfg!.name}`);
+  });
   for (const f of [list, house, deals] as JsonFile<unknown>[]) {
     f.onChange = () => { persistCache(); render(); };
     f.onError = onSyncError;
@@ -565,6 +624,7 @@ async function connect(): Promise<void> {
   // Ekoplaza is een natuurwinkel, geen gewone supermarkt: "elke supermarkt" geldt daar niet
   if (H().chains?.ekoplaza?.kind === 'super') house.mutate((h) => { if (h.chains.ekoplaza) h.chains.ekoplaza.kind = 'bio'; h.stores.filter((s) => s.chain === 'ekoplaza').forEach((s) => { s.type = KIND_NAME.bio; }); }, 'Ekoplaza is een natuurwinkel').catch(() => {});
   startPolling();
+  void flushOutbox(); // wat de vorige keer nog klaarstond
 }
 
 /* ---------- Interactie ---------- */
@@ -596,7 +656,11 @@ document.addEventListener('click', (e) => {
   const act = el.dataset.action, v = el.dataset.v ?? '', id = el.dataset.id ?? '';
   switch (act) {
     case 'li-out': { const it = L().find((x) => x.id === id); if (!it) return; el.classList.add('pop'); setTimeout(() => takeOff(it), 140); break; }
-    case 'li-in': el.classList.add('pop'); setTimeout(() => setItem(id, { done: false, doneAt: null, createdAt: Date.now() }, `+ ${L().find((x) => x.id === id)?.name ?? ''}`), 140); break;
+    case 'li-in': {
+      const it = L().find((x) => x.id === id); if (!it) return;
+      el.classList.add('pop'); setTimeout(() => setItem(id, { done: false, doneAt: null, createdAt: Date.now() }, `+ ${it.name}`), 140);
+      note('add', label(it.name, it.spec)); break;
+    }
     case 'li-prod': { const p = product(id); if (!p) return; el.classList.add('pop'); addItem({ name: p.name, productId: p.id, spec: el.dataset.spec || null });
       const k = kindOf(currentChain()); if (p.where.length && !p.where.includes(k)) toast(`${p.name} staat op je lijst voor ${anyLabel(p.where).toLowerCase()}`); break; }
     case 'scan-all': { const now = Date.now(); house.mutate((h) => { h.scanAllAt = now; }, 'Zoek alle producten nu').catch(() => {}); toast('Skwirl zoekt nu alle acties. Dat duurt 5 à 10 minuten.'); break; }
@@ -651,6 +715,13 @@ document.addEventListener('click', (e) => {
     case 'addr-del': { const a = H().addresses.find((x) => x.id === v); if (a && confirm(`${a.name} verwijderen?`)) house.mutate((h) => { h.addresses = h.addresses.filter((x) => x.id !== v); }, `Adres weg: ${a.name}`).catch(() => {}); break; }
     case 'place-search': void doPlaceSearch(); break;
     case 'share': sheet = { type: 'share' }; render(); break;
+    case 'push-on': void pushOn(); break;
+    case 'push-off': void pushOff(); break;
+    case 'push-test': {
+      const last = { id: uid('m'), from: cfg!.name, added: [], removed: [], at: Date.now(), test: true };
+      void meld!.mutate((d) => { d.last = last; }, `Testmelding voor ${cfg!.name}`).then(() => toast('Testmelding verstuurd; binnen een minuut of twee op je telefoon'));
+      break;
+    }
     case 'copy-link': navigator.clipboard?.writeText(shareLink()).then(() => toast('Link gekopieerd'), () => toast('Kopiëren lukt niet, selecteer de link zelf')); break;
     case 'native-share': navigator.share?.({ title: 'Skwirl', text: 'Open deze link om onze Skwirl-lijst te koppelen', url: shareLink() }).catch(() => {}); break;
     case 'disconnect': if (confirm('Skwirl op dit apparaat ontkoppelen? Je gegevens blijven op GitHub staan.')) { localStorage.removeItem(CFG_KEY); localStorage.removeItem(CACHE_KEY); location.reload(); } break;
@@ -766,7 +837,7 @@ if (fromLink) { setupPrefill = { ...fromLink, name: '' }; showSetup(); }
 else if (cfg) void connect();
 else showSetup();
 
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void pullAll(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void pullAll(); else void flushOutbox(); });
 window.addEventListener('online', () => { void pullAll(); });
 // Nieuwe versie van de app: de service worker neemt het over en de pagina laadt zichzelf opnieuw
 if ('serviceWorker' in navigator && location.protocol === 'https:') {

@@ -8,7 +8,7 @@ Een gedeeld boodschappenlijstje voor twee, met vaste producten, je eigen plekken
 - **Boodschappen**: per winkel, tegels zoals in Bring. Tik erop of eraf; houd ingedrukt voor eigenschap (bio, 500 ml) of aantal. Suggesties gebruiken je eigen vaste producten ("Volle yoghurt" in plaats van "Yoghurt").
 - **Folders**: per winkel de dag- en weekendacties, deze week en volgende week, met een knop naar de echte folder.
 - **Producten**: wat je steeds opnieuw koopt, met merk, wat je wél wilt ("groot stuk", "halfvol") en wat niet ("plakken"). Skwirl leert uit je aankopen hoe vaak je het koopt en laat altijd zien wanneer het in de aanbieding is, ook online.
-- **Plekken**: je adressen en de winkels die je volgt, en een koppellink voor een tweede telefoon.
+- **Plekken**: je adressen en de winkels die je volgt, een koppellink voor een tweede telefoon, en **meldingen**: zet de ander iets op de lijst of streept iets af, dan krijg jij binnen een paar minuten een melding (één per rondje, niet per product).
 
 > Status: persoonlijke app voor twee gebruikers, geen product voor publiek. Zie [Bekende beperkingen](#bekende-beperkingen).
 
