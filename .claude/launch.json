@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "skwirl",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["scripts/serve.mjs"],
+      "env": { "MOCK_DATA": "../skwirl-data" },
+      "port": 5173
+    }
+  ]
+}
